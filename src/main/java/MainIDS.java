@@ -1,120 +1,174 @@
-import org.pcap4j.core.PcapNetworkInterface;
-import org.pcap4j.core.PcapAddress;
-import org.pcap4j.core.Pcaps;
-import org.pcap4j.core.PcapHandle;
-import org.pcap4j.core.BpfProgram;
-import org.pcap4j.core.PacketListener;
-import org.pcap4j.packet.Packet;
-import org.pcap4j.packet.IpV4Packet;
-import org.pcap4j.packet.IpV6Packet;
-import org.pcap4j.packet.TcpPacket;
-import org.pcap4j.packet.UdpPacket;
+import org.pcap4j.core.*;
+import org.pcap4j.packet.*;
 import java.util.List;
 import java.sql.Timestamp;
 
 public class MainIDS {
+
+    // Handle a nivel de clase para poder cerrarlo desde el shutdown hook
+    private PcapHandle handle;
+
     public static void main(String[] args) {
         MainIDS main = new MainIDS();
-        main.events_capture();
+        main.run();
     }
 
-    public void events_capture() {
+    public void run() {
+        eventsCapture();
+    }
+
+    public void eventsCapture() {
         try {
             System.out.println("Buscando interfaces de red con Npcap...");
-            List<PcapNetworkInterface> listas = Pcaps.findAllDevs();
+            List<PcapNetworkInterface> interfaces = Pcaps.findAllDevs();
 
-            // Checa si hay alguna interfaz
-            if (listas.isEmpty()) {
+            // Si no hay interfaces, no podemos continuar
+            if (interfaces.isEmpty()) {
                 System.out.println("No se detectó ninguna interfaz.");
                 return;
             }
 
-            // Buscamos un dispositivo activo que no sea loopback si es posible
+            // Seleccionar dispositivo con IP de red local; fallback al primero
             PcapNetworkInterface dispositivo = null;
-            for (PcapNetworkInterface nif : listas) {
-                List<PcapAddress> direcciones = nif.getAddresses();
-                for (PcapAddress addr : direcciones) {
+            for (PcapNetworkInterface nif : interfaces) {
+                for (PcapAddress addr : nif.getAddresses()) {
                     if (addr.getAddress() != null && addr.getAddress().isSiteLocalAddress()) {
                         dispositivo = nif;
                         break;
                     }
                 }
-                if (dispositivo != null) {
+                if (dispositivo != null)
                     break;
-                }
             }
 
-            // Fallback al primer dispositivo encontrado si no hay uno con IP LAN privada
             if (dispositivo == null) {
-                dispositivo = listas.get(0);
+                dispositivo = interfaces.get(0);
             }
 
-            System.out.println("Dispositivo seleccionado para captura: " + dispositivo.getDescription());
+            System.out.println("Dispositivo seleccionado: " + dispositivo.getDescription());
 
-            // Abrir la interfaz para captura en vivo
-            int snaplen = 65536; // Capturar paquete completo
-            int timeout = 10;    // Timeout en ms
-            PcapHandle handle = dispositivo.openLive(snaplen, PcapNetworkInterface.PromiscuousMode.PROMISCUOUS, timeout);
+            int snaplen = 65536; // tamaño máximo de captura
+            int timeout = 10; // tiempo máximo de espera
+            handle = dispositivo.openLive(
+                    snaplen,
+                    PcapNetworkInterface.PromiscuousMode.PROMISCUOUS,
+                    timeout);
 
-            // Filtrar solo tráfico IPv4 o IPv6
             handle.setFilter("ip or ip6", BpfProgram.BpfCompileMode.OPTIMIZE);
 
-            System.out.println("Iniciando captura de paquetes (Ctrl+C para detener)...");
-
-            PacketListener listener = new PacketListener() {
-                @Override
-                public void gotPacket(Packet packet) {
-                    Timestamp ts = handle.getTimestamp();
-                    String srcIp = "Desconocida";
-                    String dstIp = "Desconocida";
-                    String protocol = "IP";
-                    int srcPort = -1;
-                    int dstPort = -1;
-
-                    if (packet.contains(IpV4Packet.class)) {
-                        IpV4Packet ipV4 = packet.get(IpV4Packet.class);
-                        srcIp = ipV4.getHeader().getSrcAddr().getHostAddress();
-                        dstIp = ipV4.getHeader().getDstAddr().getHostAddress();
-                    } else if (packet.contains(IpV6Packet.class)) {
-                        IpV6Packet ipV6 = packet.get(IpV6Packet.class);
-                        srcIp = ipV6.getHeader().getSrcAddr().getHostAddress();
-                        dstIp = ipV6.getHeader().getDstAddr().getHostAddress();
+            // --- SHUTDOWN HOOK: cierre limpio al presionar Ctrl+C ---
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.println("\nDeteniendo captura...");
+                if (handle != null && handle.isOpen()) {
+                    try {
+                        handle.breakLoop();
+                    } catch (NotOpenException e) {
+                        // ya estaba cerrado, no hay nada que hacer
+                    } finally {
+                        handle.close();
+                        System.out.println("Handle cerrado correctamente.");
                     }
+                }
+            }));
 
-                    if (packet.contains(TcpPacket.class)) {
-                        TcpPacket tcp = packet.get(TcpPacket.class);
-                        srcPort = tcp.getHeader().getSrcPort().valueAsInt();
-                        dstPort = tcp.getHeader().getDstPort().valueAsInt();
-                        protocol = "TCP";
-                    } else if (packet.contains(UdpPacket.class)) {
-                        UdpPacket udp = packet.get(UdpPacket.class);
-                        srcPort = udp.getHeader().getSrcPort().valueAsInt();
-                        dstPort = udp.getHeader().getDstPort().valueAsInt();
-                        protocol = "UDP";
-                    }
-
-                    // Imprimimos el evento si pudimos extraer la dirección IP
-                    if (!srcIp.equals("Desconocida")) {
-                        System.out.printf("[%s] [%s] %s:%d -> %s:%d (Acceso al puerto: %d)%n",
-                            ts != null ? ts.toString() : "N/A", protocol, srcIp, srcPort, dstIp, dstPort, dstPort);
-                    }
+            // --- PACKET LISTENER: conecta captura con procesamiento ---
+            PacketListener listener = packet -> {
+                Timestamp ts = new Timestamp(System.currentTimeMillis());
+                Event event = dataProcess(packet, ts);
+                if (event != null) {
+                    // Aquí puedes enviar el evento a un logger, cola, base de datos, etc.
+                    System.out.println(event);
                 }
             };
 
-            // Iniciar la captura en bucle infinito
+            System.out.println("Capturando paquetes (Ctrl+C para detener)...");
             handle.loop(-1, listener);
 
-            // Cerrar el handle al terminar (aunque loop(-1) corre indefinidamente)
-            handle.close();
-
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (PcapNativeException e) {
+            System.err.println("Error de Npcap (¿permisos de administrador?): " + e.getMessage());
+        } catch (NotOpenException e) {
+            System.err.println("El handle fue cerrado inesperadamente: " + e.getMessage());
+        } catch (InterruptedException e) {
+            System.out.println("Captura interrumpida.");
+            Thread.currentThread().interrupt();
         }
     }
 
-    public static void data_process() {
+    // Convierte un paquete capturado en un Event; retorna null si se debe ignorar
+    public Event dataProcess(Packet packet, Timestamp ts) {
+        if (packet == null)
+            return null;
+
+        boolean esIpv4 = packet.contains(IpV4Packet.class);
+        boolean esIpv6 = packet.contains(IpV6Packet.class);
+
+        if (!esIpv4 && !esIpv6)
+            return null;
+
+        Event event = new Event();
+        event.timestamp = ts;
+
+        // --- Extracción de IPs: IPv4 e IPv6 ---
+        if (esIpv4) {
+            IpV4Packet ip = packet.get(IpV4Packet.class);
+            event.srcIp = ip.getHeader().getSrcAddr().getHostAddress();
+            event.dstIp = ip.getHeader().getDstAddr().getHostAddress();
+        } else {
+            IpV6Packet ip = packet.get(IpV6Packet.class);
+            event.srcIp = ip.getHeader().getSrcAddr().getHostAddress();
+            event.dstIp = ip.getHeader().getDstAddr().getHostAddress();
+        }
+
+        // --- Extracción de protocolo y puertos ---
+        if (packet.contains(TcpPacket.class)) {
+            TcpPacket tcp = packet.get(TcpPacket.class);
+            event.protocol = "TCP";
+            event.srcPort = tcp.getHeader().getSrcPort().valueAsInt();
+            event.dstPort = tcp.getHeader().getDstPort().valueAsInt();
+            event.syn = tcp.getHeader().getSyn();
+            event.ack = tcp.getHeader().getAck();
+            event.rst = tcp.getHeader().getRst();
+            event.fin = tcp.getHeader().getFin();
+        } else if (packet.contains(UdpPacket.class)) {
+            UdpPacket udp = packet.get(UdpPacket.class);
+            event.protocol = "UDP";
+            event.srcPort = udp.getHeader().getSrcPort().valueAsInt();
+            event.dstPort = udp.getHeader().getDstPort().valueAsInt();
+        } else {
+            return null; // ni TCP ni UDP; descartamos ICMP, etc. por ahora
+        }
+
+        // --- Filtro de ruido: multicast y broadcast IPv4 e IPv6 ---
+        if (esRuidoDeRed(event.dstIp, esIpv6))
+            return null;
+
+        return event;
     }
 
-    public static void data_send() {
+    // Detecta correctamente multicast/broadcast en IPv4 e IPv6
+    private boolean esRuidoDeRed(String dstIp, boolean esIpv6) {
+        if (dstIp == null)
+            return true;
+
+        if (esIpv6) {
+            // Multicast IPv6: ff00::/8
+            return dstIp.toLowerCase().startsWith("ff");
+        } else {
+            // Multicast IPv4: 224.0.0.0 - 239.255.255.255 (primer octeto 224-239)
+            String[] octetos = dstIp.split("\\.");
+            if (octetos.length == 4) {
+                try {
+                    int primerOcteto = Integer.parseInt(octetos[0]);
+                    if (primerOcteto >= 224 && primerOcteto <= 239)
+                        return true;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            // Broadcast limitado
+            if (dstIp.equals("255.255.255.255"))
+                return true;
+
+            return false;
+        }
     }
 }
