@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * dirigidos a una misma IP destino dentro de una ventana de tiempo.
  * Si se excede el umbral, el evento se clasifica como SYN_FLOOD.
  */
-public class SynFloodDetector {
+public class SynFloodDetector implements Detector {
 
     // --- Configuración ---
     private static final long WINDOW_MS = 5_000;    // ventana de 5 segundos

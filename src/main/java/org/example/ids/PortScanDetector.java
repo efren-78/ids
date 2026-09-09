@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * IP origen dentro de una ventana de tiempo. Si se excede el umbral,
  * el evento se clasifica como PORT_SCAN.
  */
-public class PortScanDetector {
+public class PortScanDetector implements Detector {
 
     // --- Configuración ---
     private static final long WINDOW_MS = 10_000;   // ventana de 10 segundos
