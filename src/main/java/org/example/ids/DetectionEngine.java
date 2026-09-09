@@ -1,5 +1,7 @@
 package org.example.ids;
 
+import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -7,15 +9,14 @@ import java.util.concurrent.TimeUnit;
 /**
  * Motor de detección de intrusiones.
  *
- * Coordina los detectores individuales (PortScan, SynFlood) y gestiona
+ * Coordina los detectores registrados y gestiona
  * la limpieza periódica de datos expirados en las ventanas de tiempo.
  * Cada evento pasa por todos los detectores; el primero que detecte
- * una anomalía clasifica el evento.
+ * una anomalía clasifica el evento y se detiene la cadena.
  */
 public class DetectionEngine {
 
-    private final PortScanDetector portScanDetector = new PortScanDetector();
-    private final SynFloodDetector synFloodDetector = new SynFloodDetector();
+    private final List<Detector> detectors = new ArrayList<>();
 
     // Hilo daemon que purga datos expirados periódicamente
     private final ScheduledExecutorService cleaner =
@@ -26,8 +27,22 @@ public class DetectionEngine {
             });
 
     public DetectionEngine() {
+        // Registrar detectores por defecto
+        detectors.add(new PortScanDetector());
+        detectors.add(new SynFloodDetector());
+
         // Purgar ventanas expiradas cada 30 segundos
         cleaner.scheduleAtFixedRate(this::purgeAll, 30, 30, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Registra un nuevo detector en el motor.
+     * Los detectores se ejecutan en el orden en que se agregan.
+     *
+     * @param detector el detector a registrar
+     */
+    public void addDetector(Detector detector) {
+        detectors.add(detector);
     }
 
     /**
@@ -36,22 +51,19 @@ public class DetectionEngine {
      * Si ninguno detecta nada, el evento conserva su tipo NORMAL.
      */
     public void analyze(Event event) {
-        // Port scan: ¿esta IP está tocando demasiados puertos?
-        portScanDetector.analyze(event);
-        if (event.event_type != Event.EventType.NORMAL) {
-            return; // ya clasificado, no seguir analizando
+        for (Detector detector : detectors) {
+            detector.analyze(event);
+            if (event.event_type != Event.EventType.NORMAL) {
+                return; // ya clasificado, no seguir analizando
+            }
         }
-
-        // SYN flood: ¿esta IP destino recibe demasiados SYN?
-        synFloodDetector.analyze(event);
     }
 
     /**
      * Purga datos expirados de todos los detectores.
      */
     private void purgeAll() {
-        portScanDetector.purgeExpired();
-        synFloodDetector.purgeExpired();
+        detectors.forEach(Detector::purgeExpired);
     }
 
     /**
@@ -61,3 +73,4 @@ public class DetectionEngine {
         cleaner.shutdownNow();
     }
 }
+
