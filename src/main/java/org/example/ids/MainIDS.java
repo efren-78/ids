@@ -1,3 +1,4 @@
+package org.example.ids;
 import org.pcap4j.core.*;
 import org.pcap4j.packet.*;
 import java.util.List;
@@ -7,6 +8,7 @@ public class MainIDS {
 
     // Handle a nivel de clase para poder cerrarlo desde el shutdown hook
     private PcapHandle handle;
+    private final DetectionEngine detectionEngine = new DetectionEngine();
 
     public static void main(String[] args) {
         MainIDS main = new MainIDS();
@@ -59,6 +61,7 @@ public class MainIDS {
             // --- SHUTDOWN HOOK: cierre limpio al presionar Ctrl+C ---
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("\nDeteniendo captura...");
+                detectionEngine.shutdown();
                 if (handle != null && handle.isOpen()) {
                     try {
                         handle.breakLoop();
@@ -71,13 +74,20 @@ public class MainIDS {
                 }
             }));
 
-            // --- PACKET LISTENER: conecta captura con procesamiento ---
+            // --- PACKET LISTENER: conecta captura con procesamiento y detección ---
             PacketListener listener = packet -> {
                 Timestamp ts = new Timestamp(System.currentTimeMillis());
                 Event event = dataProcess(packet, ts);
                 if (event != null) {
-                    // Aquí puedes enviar el evento a un logger, cola, base de datos, etc.
-                    System.out.println(event);
+                    // Pasar el evento por el motor de detección
+                    detectionEngine.analyze(event);
+
+                    // Imprimir alertas de forma destacada
+                    if (event.event_type != Event.EventType.NORMAL) {
+                        System.out.println("⚠ ALERTA: " + event);
+                    } else {
+                        System.out.println(event);
+                    }
                 }
             };
 

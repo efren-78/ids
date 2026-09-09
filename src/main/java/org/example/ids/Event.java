@@ -1,3 +1,4 @@
+package org.example.ids;
 import java.sql.*;
 
 public class Event {
