@@ -1,7 +1,7 @@
 package org.example.ids;
 
 import org.junit.jupiter.api.Test;
-import java.sql.Timestamp;
+import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SynFloodDetectorTest {
@@ -9,14 +9,14 @@ class SynFloodDetectorTest {
     // Helper para crear un evento TCP con flags configurables
     private Event crearEventoTcp(String dstIp, boolean syn, boolean ack) {
         Event event = new Event();
-        event.timestamp = new Timestamp(System.currentTimeMillis());
-        event.srcIp = "10.0.0.99";
-        event.dstIp = dstIp;
-        event.srcPort = 45000;
-        event.dstPort = 80;
-        event.protocol = "TCP";
-        event.syn = syn;
-        event.ack = ack;
+        event.setTimestamp(Instant.now());
+        event.setSrcIp("10.0.0.99");
+        event.setDstIp(dstIp);
+        event.setSrcPort(45000);
+        event.setDstPort(80);
+        event.setProtocol("TCP");
+        event.setSyn(syn);
+        event.setAck(ack);
         return event;
     }
 
@@ -34,7 +34,7 @@ class SynFloodDetectorTest {
         }
 
         // 3. ASSERT — se debe clasificar como SYN_FLOOD
-        assertEquals(Event.EventType.SYN_FLOOD, ultimoEvento.event_type);
+        assertEquals(Event.EventType.SYN_FLOOD, ultimoEvento.getEventType());
     }
 
     @Test
@@ -51,7 +51,7 @@ class SynFloodDetectorTest {
         }
 
         // 3. ASSERT — debe permanecer NORMAL
-        assertEquals(Event.EventType.NORMAL, ultimoEvento.event_type);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
     }
 
     @Test
@@ -68,6 +68,6 @@ class SynFloodDetectorTest {
         }
 
         // 3. ASSERT — no debe disparar alerta de SYN flood
-        assertEquals(Event.EventType.NORMAL, ultimoEvento.event_type);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
     }
 }

@@ -1,7 +1,7 @@
 package org.example.ids;
 
 import org.junit.jupiter.api.Test;
-import java.sql.Timestamp;
+import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PortScanDetectorTest {
@@ -9,12 +9,12 @@ class PortScanDetectorTest {
     // Helper para crear un evento con un puerto destino específico
     private Event crearEvento(String srcIp, int dstPort) {
         Event event = new Event();
-        event.timestamp = new Timestamp(System.currentTimeMillis());
-        event.srcIp = srcIp;
-        event.dstIp = "192.168.1.100";
-        event.srcPort = 12345;
-        event.dstPort = dstPort;
-        event.protocol = "TCP";
+        event.setTimestamp(Instant.now());
+        event.setSrcIp(srcIp);
+        event.setDstIp("192.168.1.100");
+        event.setSrcPort(12345);
+        event.setDstPort(dstPort);
+        event.setProtocol("TCP");
         return event;
     }
 
@@ -32,7 +32,7 @@ class PortScanDetectorTest {
         }
 
         // 3. ASSERT — el último evento debe ser clasificado como PORT_SCAN
-        assertEquals(Event.EventType.PORT_SCAN, ultimoEvento.event_type);
+        assertEquals(Event.EventType.PORT_SCAN, ultimoEvento.getEventType());
     }
 
     @Test
@@ -49,7 +49,7 @@ class PortScanDetectorTest {
         }
 
         // 3. ASSERT — debe seguir como NORMAL
-        assertEquals(Event.EventType.NORMAL, ultimoEvento.event_type);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
     }
 
     @Test
@@ -66,7 +66,7 @@ class PortScanDetectorTest {
         }
 
         // 3. ASSERT — no es port scan porque es un solo puerto
-        assertEquals(Event.EventType.NORMAL, ultimoEvento.event_type);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
     }
 
     @Test
@@ -82,6 +82,6 @@ class PortScanDetectorTest {
         }
 
         // 3. ASSERT — ninguna IP individual supera el umbral
-        assertEquals(Event.EventType.NORMAL, ultimoEvento.event_type);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
     }
 }
