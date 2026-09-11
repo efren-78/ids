@@ -45,14 +45,14 @@ public class SynFloodDetector implements Detector {
      */
     public void analyze(Event event) {
         // Solo nos interesan paquetes TCP SYN sin ACK (inicio de conexión)
-        if (!"TCP".equals(event.protocol) || !event.syn || event.ack) {
+        if (!"TCP".equals(event.getProtocol()) || !event.isSyn() || event.isAck()) {
             return;
         }
 
-        long now = event.timestamp.getTime();
+        long now = event.getTimestamp().toEpochMilli();
 
         SynRecord record = synCounts.computeIfAbsent(
-                event.dstIp, k -> new SynRecord(now));
+                event.getDstIp(), k -> new SynRecord(now));
 
         // Si la ventana expiró, reiniciar el registro
         if (now - record.windowStart > WINDOW_MS) {
@@ -62,7 +62,7 @@ public class SynFloodDetector implements Detector {
         int count = record.count.incrementAndGet();
 
         if (count >= SYN_THRESHOLD) {
-            event.event_type = Event.EventType.SYN_FLOOD;
+            event.setEventType(Event.EventType.SYN_FLOOD);
         }
     }
 

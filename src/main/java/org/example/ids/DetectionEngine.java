@@ -53,7 +53,7 @@ public class DetectionEngine {
     public void analyze(Event event) {
         for (Detector detector : detectors) {
             detector.analyze(event);
-            if (event.event_type != Event.EventType.NORMAL) {
+            if (event.getEventType() != Event.EventType.NORMAL) {
                 return; // ya clasificado, no seguir analizando
             }
         }

@@ -43,21 +43,21 @@ public class PortScanDetector implements Detector {
      * ha contactado demasiados puertos distintos en la ventana actual.
      */
     public void analyze(Event event) {
-        long now = event.timestamp.getTime();
+        long now = event.getTimestamp().toEpochMilli();
 
         ConnectionRecord record = connections.computeIfAbsent(
-                event.srcIp, k -> new ConnectionRecord(now));
+                event.getSrcIp(), k -> new ConnectionRecord(now));
 
         // Si la ventana expiró, reiniciar el registro
         if (now - record.windowStart > WINDOW_MS) {
             record.reset(now);
         }
 
-        record.ports.add(event.dstPort);
+        record.ports.add(event.getDstPort());
 
         if (record.ports.size() >= PORT_THRESHOLD) {
-            event.event_type = Event.EventType.PORT_SCAN;
-            event.number_of_ports = record.ports.size();
+            event.setEventType(Event.EventType.PORT_SCAN);
+            event.setNumberOfPorts(record.ports.size());
         }
     }
 

@@ -2,7 +2,7 @@ package org.example.ids;
 import org.pcap4j.core.*;
 import org.pcap4j.packet.*;
 import java.util.List;
-import java.sql.Timestamp;
+import java.time.Instant;
 
 public class MainIDS {
 
@@ -76,14 +76,14 @@ public class MainIDS {
 
             // --- PACKET LISTENER: conecta captura con procesamiento y detección ---
             PacketListener listener = packet -> {
-                Timestamp ts = new Timestamp(System.currentTimeMillis());
+                Instant ts = Instant.now();
                 Event event = dataProcess(packet, ts);
                 if (event != null) {
                     // Pasar el evento por el motor de detección
                     detectionEngine.analyze(event);
 
                     // Imprimir alertas de forma destacada
-                    if (event.event_type != Event.EventType.NORMAL) {
+                    if (event.getEventType() != Event.EventType.NORMAL) {
                         System.out.println("⚠ ALERTA: " + event);
                     } else {
                         System.out.println(event);
@@ -105,7 +105,7 @@ public class MainIDS {
     }
 
     // Convierte un paquete capturado en un Event; retorna null si se debe ignorar
-    public Event dataProcess(Packet packet, Timestamp ts) {
+    public Event dataProcess(Packet packet, Instant ts) {
         if (packet == null)
             return null;
 
@@ -116,40 +116,40 @@ public class MainIDS {
             return null;
 
         Event event = new Event();
-        event.timestamp = ts;
+        event.setTimestamp(ts);
 
         // --- Extracción de IPs: IPv4 e IPv6 ---
         if (esIpv4) {
             IpV4Packet ip = packet.get(IpV4Packet.class);
-            event.srcIp = ip.getHeader().getSrcAddr().getHostAddress();
-            event.dstIp = ip.getHeader().getDstAddr().getHostAddress();
+            event.setSrcIp(ip.getHeader().getSrcAddr().getHostAddress());
+            event.setDstIp(ip.getHeader().getDstAddr().getHostAddress());
         } else {
             IpV6Packet ip = packet.get(IpV6Packet.class);
-            event.srcIp = ip.getHeader().getSrcAddr().getHostAddress();
-            event.dstIp = ip.getHeader().getDstAddr().getHostAddress();
+            event.setSrcIp(ip.getHeader().getSrcAddr().getHostAddress());
+            event.setDstIp(ip.getHeader().getDstAddr().getHostAddress());
         }
 
         // --- Extracción de protocolo y puertos ---
         if (packet.contains(TcpPacket.class)) {
             TcpPacket tcp = packet.get(TcpPacket.class);
-            event.protocol = "TCP";
-            event.srcPort = tcp.getHeader().getSrcPort().valueAsInt();
-            event.dstPort = tcp.getHeader().getDstPort().valueAsInt();
-            event.syn = tcp.getHeader().getSyn();
-            event.ack = tcp.getHeader().getAck();
-            event.rst = tcp.getHeader().getRst();
-            event.fin = tcp.getHeader().getFin();
+            event.setProtocol("TCP");
+            event.setSrcPort(tcp.getHeader().getSrcPort().valueAsInt());
+            event.setDstPort(tcp.getHeader().getDstPort().valueAsInt());
+            event.setSyn(tcp.getHeader().getSyn());
+            event.setAck(tcp.getHeader().getAck());
+            event.setRst(tcp.getHeader().getRst());
+            event.setFin(tcp.getHeader().getFin());
         } else if (packet.contains(UdpPacket.class)) {
             UdpPacket udp = packet.get(UdpPacket.class);
-            event.protocol = "UDP";
-            event.srcPort = udp.getHeader().getSrcPort().valueAsInt();
-            event.dstPort = udp.getHeader().getDstPort().valueAsInt();
+            event.setProtocol("UDP");
+            event.setSrcPort(udp.getHeader().getSrcPort().valueAsInt());
+            event.setDstPort(udp.getHeader().getDstPort().valueAsInt());
         } else {
             return null; // ni TCP ni UDP; descartamos ICMP, etc. por ahora
         }
 
         // --- Filtro de ruido: multicast y broadcast IPv4 e IPv6 ---
-        if (esRuidoDeRed(event.dstIp, esIpv6))
+        if (esRuidoDeRed(event.getDstIp(), esIpv6))
             return null;
 
         return event;
