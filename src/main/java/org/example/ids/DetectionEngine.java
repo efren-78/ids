@@ -32,12 +32,19 @@ public class DetectionEngine {
             });
 
     public DetectionEngine() {
-        // Registrar detectores por defecto
-        detectors.add(new PortScanDetector());
-        detectors.add(new SynFloodDetector());
+        this(IdsConfig.getInstance());
+    }
 
-        // Purgar ventanas expiradas cada 30 segundos con manejo seguro
-        cleaner.scheduleAtFixedRate(this::safePurgeAll, 30, 30, TimeUnit.SECONDS);
+    public DetectionEngine(IdsConfig config) {
+        IdsConfig cfg = (config != null) ? config : IdsConfig.getInstance();
+
+        // Registrar detectores por defecto con configuración externa
+        detectors.add(new PortScanDetector(cfg));
+        detectors.add(new SynFloodDetector(cfg));
+
+        // Purgar ventanas expiradas según el intervalo configurado con manejo seguro
+        int purgeSeconds = cfg.getEnginePurgeIntervalSeconds();
+        cleaner.scheduleAtFixedRate(this::safePurgeAll, purgeSeconds, purgeSeconds, TimeUnit.SECONDS);
     }
 
     /**

@@ -25,7 +25,17 @@ public class MainIDS {
 
     // Handle a nivel de clase para poder cerrarlo desde el shutdown hook
     private PcapHandle handle;
-    private final DetectionEngine detectionEngine = new DetectionEngine();
+    private final IdsConfig config;
+    private final DetectionEngine detectionEngine;
+
+    public MainIDS() {
+        this(IdsConfig.getInstance());
+    }
+
+    public MainIDS(IdsConfig config) {
+        this.config = (config != null) ? config : IdsConfig.getInstance();
+        this.detectionEngine = new DetectionEngine(this.config);
+    }
 
     public static void main(String[] args) {
         MainIDS main = new MainIDS();
@@ -70,14 +80,14 @@ public class MainIDS {
 
             logger.info("Dispositivo seleccionado: {} ({})", dispositivo.getName(), dispositivo.getDescription());
 
-            int snaplen = 65536; // tamaño máximo de captura
-            int timeout = 10;    // tiempo máximo de espera en ms
-            handle = dispositivo.openLive(
-                    snaplen,
-                    PcapNetworkInterface.PromiscuousMode.PROMISCUOUS,
-                    timeout);
+            int snaplen = config.getCaptureSnaplen();
+            int timeout = config.getCaptureTimeoutMs();
+            PcapNetworkInterface.PromiscuousMode mode = config.isCapturePromiscuous()
+                    ? PcapNetworkInterface.PromiscuousMode.PROMISCUOUS
+                    : PcapNetworkInterface.PromiscuousMode.NONPROMISCUOUS;
 
-            handle.setFilter("ip or ip6", BpfProgram.BpfCompileMode.OPTIMIZE);
+            handle = dispositivo.openLive(snaplen, mode, timeout);
+            handle.setFilter(config.getCaptureFilter(), BpfProgram.BpfCompileMode.OPTIMIZE);
 
             // --- SHUTDOWN HOOK: cierre limpio al presionar Ctrl+C ---
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

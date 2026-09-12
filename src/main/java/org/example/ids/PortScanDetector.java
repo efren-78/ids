@@ -24,7 +24,15 @@ public class PortScanDetector implements Detector {
     private final Cache<String, Set<Integer>> connections;
 
     public PortScanDetector() {
-        this(DEFAULT_MAX_CAPACITY, DEFAULT_WINDOW_MS, DEFAULT_PORT_THRESHOLD);
+        this(IdsConfig.getInstance());
+    }
+
+    public PortScanDetector(IdsConfig config) {
+        this(
+            config != null ? config.getPortScanMaxCapacity() : DEFAULT_MAX_CAPACITY,
+            config != null ? config.getPortScanWindowMs() : DEFAULT_WINDOW_MS,
+            config != null ? config.getPortScanThreshold() : DEFAULT_PORT_THRESHOLD
+        );
     }
 
     public PortScanDetector(long maxCapacity, long windowMs, int portThreshold) {

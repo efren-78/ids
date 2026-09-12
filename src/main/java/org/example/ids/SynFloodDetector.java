@@ -23,7 +23,15 @@ public class SynFloodDetector implements Detector {
     private final Cache<String, AtomicInteger> synCounts;
 
     public SynFloodDetector() {
-        this(DEFAULT_MAX_CAPACITY, DEFAULT_WINDOW_MS, DEFAULT_SYN_THRESHOLD);
+        this(IdsConfig.getInstance());
+    }
+
+    public SynFloodDetector(IdsConfig config) {
+        this(
+            config != null ? config.getSynFloodMaxCapacity() : DEFAULT_MAX_CAPACITY,
+            config != null ? config.getSynFloodWindowMs() : DEFAULT_WINDOW_MS,
+            config != null ? config.getSynFloodThreshold() : DEFAULT_SYN_THRESHOLD
+        );
     }
 
     public SynFloodDetector(long maxCapacity, long windowMs, int synThreshold) {
