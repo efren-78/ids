@@ -126,4 +126,44 @@ class ResilienceTest {
         assertDoesNotThrow(portScanDetector::purgeExpired);
         assertDoesNotThrow(synFloodDetector::purgeExpired);
     }
+
+    @Test
+    void caffeineCacheRespectsMaxCapacityAndEvictsExcessEntries() {
+        // Creamos detectores con capacidad acotada a solo 10 entradas para el test
+        int maxCapacity = 10;
+        PortScanDetector portScanDetector = new PortScanDetector(maxCapacity, 10_000, 15);
+        SynFloodDetector synFloodDetector = new SynFloodDetector(maxCapacity, 5_000, 50);
+
+        // Enviamos 100 IPs distintas simulando un ataque de IP Spoofing masivo
+        for (int i = 1; i <= 100; i++) {
+            Event eventPortScan = new Event();
+            eventPortScan.setSrcIp("10.0.0." + i);
+            eventPortScan.setDstPort(80);
+            portScanDetector.analyze(eventPortScan);
+
+            Event eventSyn = new Event();
+            eventSyn.setDstIp("192.168.1." + i);
+            eventSyn.setProtocol("TCP");
+            eventSyn.setSyn(true);
+            eventSyn.setAck(false);
+            synFloodDetector.analyze(eventSyn);
+        }
+
+        // Forzar ciclo de limpieza de Caffeine
+        portScanDetector.purgeExpired();
+        synFloodDetector.purgeExpired();
+
+        // La cantidad en memoria no debe desbordarse infinitamente (debe mantenerse cerca de maxCapacity)
+        assertTrue(portScanDetector.estimatedSize() <= maxCapacity,
+                "PortScanDetector no debe exceder la capacidad máxima de memoria");
+        assertTrue(synFloodDetector.estimatedSize() <= maxCapacity,
+                "SynFloodDetector no debe exceder la capacidad máxima de memoria");
+
+        // Verificar que las estadísticas registraron desalojos
+        assertTrue(portScanDetector.getStats().evictionCount() > 0,
+                "PortScanDetector debió desalojar entradas excedentes");
+        assertTrue(synFloodDetector.getStats().evictionCount() > 0,
+                "SynFloodDetector debió desalojar entradas excedentes");
+    }
 }
+
