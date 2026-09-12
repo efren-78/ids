@@ -43,13 +43,20 @@ public class SynFloodDetector implements Detector {
      * ha recibido demasiados SYN sin ACK en la ventana actual.
      * Solo procesa paquetes TCP con SYN=true y ACK=false.
      */
+    @Override
     public void analyze(Event event) {
-        // Solo nos interesan paquetes TCP SYN sin ACK (inicio de conexión)
-        if (!"TCP".equals(event.getProtocol()) || !event.isSyn() || event.isAck()) {
+        if (event == null || event.getDstIp() == null || event.getDstIp().isBlank()) {
             return;
         }
 
-        long now = event.getTimestamp().toEpochMilli();
+        // Solo nos interesan paquetes TCP SYN sin ACK (inicio de conexión)
+        if (!"TCP".equalsIgnoreCase(event.getProtocol()) || !event.isSyn() || event.isAck()) {
+            return;
+        }
+
+        long now = (event.getTimestamp() != null)
+                ? event.getTimestamp().toEpochMilli()
+                : System.currentTimeMillis();
 
         SynRecord record = synCounts.computeIfAbsent(
                 event.getDstIp(), k -> new SynRecord(now));
@@ -69,9 +76,11 @@ public class SynFloodDetector implements Detector {
     /**
      * Purga registros cuya ventana ya expiró para liberar memoria.
      */
+    @Override
     public void purgeExpired() {
         long now = System.currentTimeMillis();
         synCounts.entrySet().removeIf(
-                entry -> now - entry.getValue().windowStart > WINDOW_MS * 2);
+                entry -> entry.getValue() == null || now - entry.getValue().windowStart > WINDOW_MS * 2);
     }
 }
+

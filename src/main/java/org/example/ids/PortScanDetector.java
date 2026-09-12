@@ -42,8 +42,15 @@ public class PortScanDetector implements Detector {
      * Analiza un evento y lo marca como PORT_SCAN si la IP origen
      * ha contactado demasiados puertos distintos en la ventana actual.
      */
+    @Override
     public void analyze(Event event) {
-        long now = event.getTimestamp().toEpochMilli();
+        if (event == null || event.getSrcIp() == null || event.getSrcIp().isBlank()) {
+            return;
+        }
+
+        long now = (event.getTimestamp() != null)
+                ? event.getTimestamp().toEpochMilli()
+                : System.currentTimeMillis();
 
         ConnectionRecord record = connections.computeIfAbsent(
                 event.getSrcIp(), k -> new ConnectionRecord(now));
@@ -64,9 +71,11 @@ public class PortScanDetector implements Detector {
     /**
      * Purga registros cuya ventana ya expiró para liberar memoria.
      */
+    @Override
     public void purgeExpired() {
         long now = System.currentTimeMillis();
         connections.entrySet().removeIf(
-                entry -> now - entry.getValue().windowStart > WINDOW_MS * 2);
+                entry -> entry.getValue() == null || now - entry.getValue().windowStart > WINDOW_MS * 2);
     }
 }
+
