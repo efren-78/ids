@@ -1,5 +1,8 @@
 package org.example.ids;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.Executors;
@@ -16,6 +19,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class DetectionEngine {
 
+    private static final Logger logger = LoggerFactory.getLogger(DetectionEngine.class);
+
     private final List<Detector> detectors = new ArrayList<>();
 
     // Hilo daemon que purga datos expirados periódicamente
@@ -31,8 +36,8 @@ public class DetectionEngine {
         detectors.add(new PortScanDetector());
         detectors.add(new SynFloodDetector());
 
-        // Purgar ventanas expiradas cada 30 segundos
-        cleaner.scheduleAtFixedRate(this::purgeAll, 30, 30, TimeUnit.SECONDS);
+        // Purgar ventanas expiradas cada 30 segundos con manejo seguro
+        cleaner.scheduleAtFixedRate(this::safePurgeAll, 30, 30, TimeUnit.SECONDS);
     }
 
     /**
@@ -42,28 +47,53 @@ public class DetectionEngine {
      * @param detector el detector a registrar
      */
     public void addDetector(Detector detector) {
-        detectors.add(detector);
+        if (detector != null) {
+            detectors.add(detector);
+        }
     }
 
     /**
      * Analiza un evento pasándolo por todos los detectores.
+     * Implementa aislamiento de fallos (Fault Isolation): si un detector falla,
+     * se registra el error y se continúa con los siguientes detectores.
      * El primer detector que encuentre una anomalía clasifica el evento.
      * Si ninguno detecta nada, el evento conserva su tipo NORMAL.
      */
     public void analyze(Event event) {
+        if (event == null) {
+            return;
+        }
+
         for (Detector detector : detectors) {
-            detector.analyze(event);
-            if (event.getEventType() != Event.EventType.NORMAL) {
-                return; // ya clasificado, no seguir analizando
+            try {
+                detector.analyze(event);
+                if (event.getEventType() != Event.EventType.NORMAL) {
+                    return; // ya clasificado, no seguir analizando
+                }
+            } catch (Exception e) {
+                logger.error("Fallo no controlado en detector {}: {}",
+                        detector.getClass().getSimpleName(), e.getMessage(), e);
             }
         }
     }
 
     /**
-     * Purga datos expirados de todos los detectores.
+     * Purga datos expirados de todos los detectores de forma segura.
+     * Evita que una excepción no capturada cancele silenciosamente el ScheduledExecutorService.
      */
-    private void purgeAll() {
-        detectors.forEach(Detector::purgeExpired);
+    public void safePurgeAll() {
+        try {
+            for (Detector detector : detectors) {
+                try {
+                    detector.purgeExpired();
+                } catch (Exception e) {
+                    logger.error("Error al purgar estado en detector {}: {}",
+                            detector.getClass().getSimpleName(), e.getMessage(), e);
+                }
+            }
+        } catch (Throwable t) {
+            logger.error("Error crítico inesperado en el ciclo periódico de purga", t);
+        }
     }
 
     /**
@@ -73,4 +103,5 @@ public class DetectionEngine {
         cleaner.shutdownNow();
     }
 }
+
 
