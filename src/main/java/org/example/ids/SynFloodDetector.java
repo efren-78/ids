@@ -1,41 +1,38 @@
 package org.example.ids;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.stats.CacheStats;
+
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Detecta ataques SYN flood.
  *
- * Algoritmo: cuenta paquetes TCP con flag SYN activo y ACK inactivo
- * dirigidos a una misma IP destino dentro de una ventana de tiempo.
- * Si se excede el umbral, el evento se clasifica como SYN_FLOOD.
+ * Utiliza Caffeine Cache con algoritmo W-TinyLFU para limitar el uso de memoria
+ * y descartar automáticamente contadores de SYN expirados tras la ventana de tiempo.
  */
 public class SynFloodDetector implements Detector {
 
-    // --- Configuración ---
-    private static final long WINDOW_MS = 5_000;    // ventana de 5 segundos
-    private static final int SYN_THRESHOLD = 50;     // 50 SYNs para disparar alerta
+    private static final long DEFAULT_WINDOW_MS = 5_000;
+    private static final int DEFAULT_SYN_THRESHOLD = 50;
+    private static final long DEFAULT_MAX_CAPACITY = 50_000;
 
-    // --- Estado interno ---
-    private final Map<String, SynRecord> synCounts = new ConcurrentHashMap<>();
+    private final int synThreshold;
+    private final Cache<String, AtomicInteger> synCounts;
 
-    /**
-     * Registro de SYNs recibidos por IP destino:
-     * contador atómico y el inicio de la ventana.
-     */
-    private static class SynRecord {
-        volatile long windowStart;
-        final AtomicInteger count = new AtomicInteger(0);
+    public SynFloodDetector() {
+        this(DEFAULT_MAX_CAPACITY, DEFAULT_WINDOW_MS, DEFAULT_SYN_THRESHOLD);
+    }
 
-        SynRecord(long now) {
-            this.windowStart = now;
-        }
-
-        void reset(long now) {
-            this.windowStart = now;
-            this.count.set(0);
-        }
+    public SynFloodDetector(long maxCapacity, long windowMs, int synThreshold) {
+        this.synThreshold = synThreshold;
+        this.synCounts = Caffeine.newBuilder()
+                .maximumSize(maxCapacity)
+                .expireAfterWrite(windowMs, TimeUnit.MILLISECONDS)
+                .recordStats()
+                .build();
     }
 
     /**
@@ -54,33 +51,37 @@ public class SynFloodDetector implements Detector {
             return;
         }
 
-        long now = (event.getTimestamp() != null)
-                ? event.getTimestamp().toEpochMilli()
-                : System.currentTimeMillis();
+        AtomicInteger counter = synCounts.get(event.getDstIp(), k -> new AtomicInteger(0));
+        if (counter != null) {
+            int count = counter.incrementAndGet();
 
-        SynRecord record = synCounts.computeIfAbsent(
-                event.getDstIp(), k -> new SynRecord(now));
-
-        // Si la ventana expiró, reiniciar el registro
-        if (now - record.windowStart > WINDOW_MS) {
-            record.reset(now);
-        }
-
-        int count = record.count.incrementAndGet();
-
-        if (count >= SYN_THRESHOLD) {
-            event.setEventType(Event.EventType.SYN_FLOOD);
+            if (count >= synThreshold) {
+                event.setEventType(Event.EventType.SYN_FLOOD);
+            }
         }
     }
 
     /**
-     * Purga registros cuya ventana ya expiró para liberar memoria.
+     * Purga registros expirados delegando la limpieza ultra-eficiente a Caffeine.
      */
     @Override
     public void purgeExpired() {
-        long now = System.currentTimeMillis();
-        synCounts.entrySet().removeIf(
-                entry -> entry.getValue() == null || now - entry.getValue().windowStart > WINDOW_MS * 2);
+        synCounts.cleanUp();
+    }
+
+    /**
+     * Retorna las estadísticas de rendimiento y desalojos de la caché.
+     */
+    public CacheStats getStats() {
+        return synCounts.stats();
+    }
+
+    /**
+     * Retorna el número estimado de IPs registradas actualmente en memoria.
+     */
+    public long estimatedSize() {
+        return synCounts.estimatedSize();
     }
 }
+
 

@@ -1,41 +1,39 @@
 package org.example.ids;
 
-import java.util.Map;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.stats.CacheStats;
+
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Detecta escaneo de puertos (port scanning).
  *
- * Algoritmo: rastrea cuántos puertos destino distintos contacta una misma
- * IP origen dentro de una ventana de tiempo. Si se excede el umbral,
- * el evento se clasifica como PORT_SCAN.
+ * Utiliza Caffeine Cache con algoritmo W-TinyLFU para limitar el uso de memoria
+ * y descartar automáticamente registros de conexiones expiradas.
  */
 public class PortScanDetector implements Detector {
 
-    // --- Configuración ---
-    private static final long WINDOW_MS = 10_000;   // ventana de 10 segundos
-    private static final int PORT_THRESHOLD = 15;    // 15 puertos distintos para disparar alerta
+    private static final long DEFAULT_WINDOW_MS = 10_000;
+    private static final int DEFAULT_PORT_THRESHOLD = 15;
+    private static final long DEFAULT_MAX_CAPACITY = 50_000;
 
-    // --- Estado interno ---
-    private final Map<String, ConnectionRecord> connections = new ConcurrentHashMap<>();
+    private final int portThreshold;
+    private final Cache<String, Set<Integer>> connections;
 
-    /**
-     * Registro de conexiones por IP origen: puertos destino contactados
-     * y el inicio de la ventana de tiempo actual.
-     */
-    private static class ConnectionRecord {
-        volatile long windowStart;
-        final Set<Integer> ports = ConcurrentHashMap.newKeySet();
+    public PortScanDetector() {
+        this(DEFAULT_MAX_CAPACITY, DEFAULT_WINDOW_MS, DEFAULT_PORT_THRESHOLD);
+    }
 
-        ConnectionRecord(long now) {
-            this.windowStart = now;
-        }
-
-        void reset(long now) {
-            this.windowStart = now;
-            this.ports.clear();
-        }
+    public PortScanDetector(long maxCapacity, long windowMs, int portThreshold) {
+        this.portThreshold = portThreshold;
+        this.connections = Caffeine.newBuilder()
+                .maximumSize(maxCapacity)
+                .expireAfterWrite(windowMs, TimeUnit.MILLISECONDS)
+                .recordStats()
+                .build();
     }
 
     /**
@@ -48,34 +46,38 @@ public class PortScanDetector implements Detector {
             return;
         }
 
-        long now = (event.getTimestamp() != null)
-                ? event.getTimestamp().toEpochMilli()
-                : System.currentTimeMillis();
+        Set<Integer> ports = connections.get(event.getSrcIp(), k -> ConcurrentHashMap.newKeySet());
+        if (ports != null) {
+            ports.add(event.getDstPort());
 
-        ConnectionRecord record = connections.computeIfAbsent(
-                event.getSrcIp(), k -> new ConnectionRecord(now));
-
-        // Si la ventana expiró, reiniciar el registro
-        if (now - record.windowStart > WINDOW_MS) {
-            record.reset(now);
-        }
-
-        record.ports.add(event.getDstPort());
-
-        if (record.ports.size() >= PORT_THRESHOLD) {
-            event.setEventType(Event.EventType.PORT_SCAN);
-            event.setNumberOfPorts(record.ports.size());
+            if (ports.size() >= portThreshold) {
+                event.setEventType(Event.EventType.PORT_SCAN);
+                event.setNumberOfPorts(ports.size());
+            }
         }
     }
 
     /**
-     * Purga registros cuya ventana ya expiró para liberar memoria.
+     * Purga registros expirados delegando la limpieza ultra-eficiente a Caffeine.
      */
     @Override
     public void purgeExpired() {
-        long now = System.currentTimeMillis();
-        connections.entrySet().removeIf(
-                entry -> entry.getValue() == null || now - entry.getValue().windowStart > WINDOW_MS * 2);
+        connections.cleanUp();
+    }
+
+    /**
+     * Retorna las estadísticas de rendimiento y desalojos de la caché.
+     */
+    public CacheStats getStats() {
+        return connections.stats();
+    }
+
+    /**
+     * Retorna el número estimado de IPs registradas actualmente en memoria.
+     */
+    public long estimatedSize() {
+        return connections.estimatedSize();
     }
 }
+
 
