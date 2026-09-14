@@ -11,6 +11,7 @@ public class Event {
         NORMAL,
         PORT_SCAN,
         SYN_FLOOD,
+        BRUTE_FORCE,
         SUSPICIOUS_CONNECTION
     }
 
