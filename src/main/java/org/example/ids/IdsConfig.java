@@ -180,4 +180,35 @@ public class IdsConfig {
     public long getSynFloodMaxCapacity() {
         return getLong("ids.detector.synflood.max.capacity", 50000L);
     }
+
+    // --- Helpers de Fuerza Bruta ---
+    public long getBruteForceWindowMs() {
+        return getLong("ids.detector.bruteforce.window.ms", 10000L);
+    }
+
+    public int getBruteForceThreshold() {
+        return getInt("ids.detector.bruteforce.threshold", 20);
+    }
+
+    public long getBruteForceMaxCapacity() {
+        return getLong("ids.detector.bruteforce.max.capacity", 50000L);
+    }
+
+    public java.util.Set<Integer> getBruteForceTargetPorts() {
+        String portsStr = getString("ids.detector.bruteforce.ports", "21,22,23,3389,3306,5432");
+        java.util.Set<Integer> ports = new java.util.HashSet<>();
+        if (portsStr != null && !portsStr.isBlank()) {
+            for (String p : portsStr.split(",")) {
+                try {
+                    ports.add(Integer.parseInt(p.trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        if (ports.isEmpty()) {
+            ports.addAll(java.util.List.of(21, 22, 23, 3389, 3306, 5432));
+        }
+        return ports;
+    }
 }
+
