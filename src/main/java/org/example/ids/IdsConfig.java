@@ -210,5 +210,15 @@ public class IdsConfig {
         }
         return ports;
     }
+
+    // --- Helpers de Servidor UI ---
+    public boolean isUiEnabled() {
+        return getBoolean("ids.ui.enabled", true);
+    }
+
+    public int getUiPort() {
+        return getInt("ids.ui.port", 8080);
+    }
 }
+
 
