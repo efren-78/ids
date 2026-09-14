@@ -78,4 +78,26 @@ class DetectionEngineTest {
 
         assertEquals(Event.EventType.SYN_FLOOD, ultimoEvento.getEventType());
     }
+
+    // Test donde detecta un ataque de fuerza bruta sospechoso
+    @Test
+    void detectaBruteForceCorrectamente() {
+        Event ultimoEvento = null;
+        for (int i = 1; i <= 20; i++) {
+            ultimoEvento = new Event();
+            ultimoEvento.setTimestamp(Instant.now());
+            ultimoEvento.setSrcIp("10.0.0.7");
+            ultimoEvento.setDstIp("192.168.1.50");
+            ultimoEvento.setSrcPort(40000);
+            ultimoEvento.setDstPort(22); // SSH
+            ultimoEvento.setProtocol("TCP");
+            ultimoEvento.setSyn(true);
+            ultimoEvento.setAck(false);
+
+            engine.analyze(ultimoEvento);
+        }
+
+        assertEquals(Event.EventType.BRUTE_FORCE, ultimoEvento.getEventType());
+    }
 }
+

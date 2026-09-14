@@ -1,5 +1,6 @@
 package org.example.ids;
 
+import org.example.ids.detectors.Detector;
 import org.junit.jupiter.api.Test;
 
 import java.util.Properties;

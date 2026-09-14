@@ -1,8 +1,12 @@
 package org.example.ids;
 
+import org.example.ids.detectors.BruteForceDetector;
+import org.example.ids.detectors.PortScanDetector;
+import org.example.ids.detectors.SynFloodDetector;
 import org.junit.jupiter.api.Test;
 
 import java.util.Properties;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,6 +31,11 @@ class IdsConfigTest {
         assertEquals(5000L, config.getSynFloodWindowMs());
         assertEquals(50, config.getSynFloodThreshold());
         assertEquals(50000L, config.getSynFloodMaxCapacity());
+
+        assertEquals(10000L, config.getBruteForceWindowMs());
+        assertEquals(20, config.getBruteForceThreshold());
+        assertEquals(50000L, config.getBruteForceMaxCapacity());
+        assertTrue(config.getBruteForceTargetPorts().containsAll(Set.of(21, 22, 23, 3389, 3306, 5432)));
     }
 
     @Test

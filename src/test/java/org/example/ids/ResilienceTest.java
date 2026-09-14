@@ -1,5 +1,8 @@
 package org.example.ids;
 
+import org.example.ids.detectors.Detector;
+import org.example.ids.detectors.PortScanDetector;
+import org.example.ids.detectors.SynFloodDetector;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
