@@ -104,7 +104,7 @@ public class MainIDS {
                 }
             }));
 
-            // --- PACKET LISTENER: conecta captura con procesamiento y detección blindado ---
+            // --- PACKET LISTENER: conecta captura desacoplada con el pool de workers ---
             PacketListener listener = packet -> {
                 try {
                     if (packet == null) {
@@ -114,15 +114,8 @@ public class MainIDS {
                     Instant ts = Instant.now();
                     Event event = dataProcess(packet, ts);
                     if (event != null) {
-                        // Pasar el evento por el motor de detección
-                        detectionEngine.analyze(event);
-
-                        // Imprimir alertas de forma destacada o trazas según severidad
-                        if (event.getEventType() != Event.EventType.NORMAL) {
-                            logger.warn("ALERTA: {}", event);
-                        } else if (logger.isDebugEnabled()) {
-                            logger.debug("Evento: {}", event);
-                        }
+                        // Desacoplamiento total: encolar de inmediato en el worker correspondiente (microsegundos)
+                        detectionEngine.submit(event);
                     }
                 } catch (Throwable t) {
                     // Blindaje total: ningún fallo en el procesamiento de un paquete derriba la captura
