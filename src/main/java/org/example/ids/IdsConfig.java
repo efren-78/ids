@@ -137,9 +137,22 @@ public class IdsConfig {
         return getBoolean("ids.capture.promiscuous", true);
     }
 
-    // --- Helpers de Motor y Purga ---
+    // --- Helpers de Motor, Workers y Purga ---
     public int getEnginePurgeIntervalSeconds() {
         return getInt("ids.engine.purge.interval.seconds", 30);
+    }
+
+    public int getEngineWorkerCount() {
+        int configured = getInt("ids.engine.worker.count", 0);
+        if (configured <= 0) {
+            // Auto-detectar número de cores disponibles (mínimo 2)
+            return Math.max(2, Runtime.getRuntime().availableProcessors());
+        }
+        return configured;
+    }
+
+    public int getEngineQueueCapacity() {
+        return getInt("ids.engine.queue.capacity", 10000);
     }
 
     // --- Helpers de Port Scan ---
