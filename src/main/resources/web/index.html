@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDS Command Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="glow-bg"></div>
+
+    <div class="dashboard-wrapper">
+        <!-- TOP HEADER BAR -->
+        <header class="header-bar">
+            <div class="brand-container">
+                <div class="brand-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <path d="m9 12 2 2 4-4" />
+                    </svg>
+                </div>
+                <h1 class="brand-title">COMMAND CENTER</h1>
+            </div>
+
+            <div class="header-actions">
+                <div class="uptime-container">
+                    <span class="pulse-dot"></span>
+                    <span class="uptime-text">UPTIME: <span id="uptime-display" class="mono">00:00:00</span></span>
+                </div>
+
+                <div class="action-buttons-group">
+                    <button class="btn-ctrl" id="btn-monitor-start" title="Iniciar Monitoreo">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="6 3 20 12 6 21 6 3" />
+                        </svg>
+                    </button>
+                    <button class="btn-ctrl" id="btn-monitor-restart" title="Reiniciar Monitoreo">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                        </svg>
+                    </button>
+                    <button class="btn-ctrl" id="btn-monitor-stop" title="Pausar / Detener Monitoreo">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="4" width="4" height="16" rx="1" />
+                            <rect x="14" y="4" width="4" height="16" rx="1" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN DASHBOARD 2-COLUMN GRID -->
+        <main class="main-layout">
+            <!-- LEFT COLUMN: Realtime Chart & 4 KPIs -->
+            <section class="left-column">
+                <!-- Realtime Network Activity Card -->
+                <div class="card-panel chart-card">
+                    <div class="card-header">
+                        <div class="title-with-icon">
+                            <div class="icon-bubble cyan-bubble">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                                </svg>
+                            </div>
+                            <h2>Actividad de Red en Tiempo Real</h2>
+                        </div>
+                        <div class="time-filter-badge" id="time-filter-dropdown">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" width="13" height="13">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            <span>Últimos 60s</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <div class="chart-container">
+                        <canvas id="traffic-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 4 KPI Metrics Grid (2x2) -->
+                <div class="kpis-grid">
+                    <!-- KPI 1: Paquetes Analizados -->
+                    <div class="kpi-card kpi-cyan" id="card-processed">
+                        <div class="kpi-icon-row">
+                            <div class="icon-bubble cyan-bubble">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                                </svg>
+                            </div>
+                        </div>
+                        <span class="kpi-label">PAQUETES ANALIZADOS</span>
+                        <div class="kpi-value-row">
+                            <span class="kpi-number mono" id="val-processed">0</span>
+                        </div>
+                        <div class="kpi-footer-row">
+                            <span class="badge-pill cyan-pill" id="val-pps">0 pps</span>
+                            <span class="kpi-subtext">Rendimiento continuo</span>
+                        </div>
+                    </div>
+
+                    <!-- KPI 2: Alertas Detectadas -->
+                    <div class="kpi-card kpi-green" id="card-alerts">
+                        <div class="kpi-icon-row">
+                            <div class="icon-bubble pink-bubble">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path
+                                        d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                                    <line x1="12" y1="9" x2="12" y2="13" />
+                                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg>
+                            </div>
+                        </div>
+                        <span class="kpi-label">ALERTAS DETECTADAS</span>
+                        <div class="kpi-value-row">
+                            <span class="kpi-number mono" id="val-alerts">0</span>
+                        </div>
+                        <div class="kpi-footer-row">
+                            <span class="threat-status" id="val-threat-level">ESTADO NORMAL</span>
+                        </div>
+                    </div>
+
+                    <!-- KPI 3: Workers en Paralelo -->
+                    <div class="kpi-card kpi-blue" id="card-workers">
+                        <div class="kpi-icon-row">
+                            <div class="icon-bubble blue-bubble">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3" />
+                                    <path
+                                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <span class="kpi-label">WORKERS EN PARALELO</span>
+                        <div class="kpi-value-row">
+                            <span class="kpi-number mono" id="val-workers">8</span>
+                        </div>
+                        <div class="kpi-footer-row">
+                            <span class="kpi-subtext">Flow Hashing por IP</span>
+                        </div>
+                    </div>
+
+                    <!-- KPI 4: Descartes Backpressure -->
+                    <div class="kpi-card kpi-amber" id="card-dropped">
+                        <div class="kpi-icon-row">
+                            <div class="icon-bubble amber-bubble">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="1" x2="12" y2="23" />
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                </svg>
+                            </div>
+                        </div>
+                        <span class="kpi-label">DESCARTES (BACKPRESSURE)</span>
+                        <div class="kpi-value-row">
+                            <span class="kpi-number mono" id="val-dropped">0</span>
+                        </div>
+                        <div class="kpi-footer-row">
+                            <span class="kpi-subtext">0% Pérdida de paquetes</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RIGHT COLUMN: Actividades Sospechosas Table -->
+            <section class="right-column">
+                <div class="card-panel suspicious-panel">
+                    <div class="card-header">
+                        <div class="title-with-icon">
+                            <div class="icon-bubble gray-bubble">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                                    stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                </svg>
+                            </div>
+                            <h2>Actividades Sospechosas</h2>
+                        </div>
+                        <div class="header-right-actions">
+                            <!-- Attack Simulator Dropdown Action -->
+                            <div class="sim-dropdown-wrapper">
+                                <button class="btn-sim-trigger" id="btn-sim-dropdown" title="Simular Tráfico de Ataque">
+                                    <span>Simular</span>
+                                    <svg class="chevron-sim" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" width="11" height="11">
+                                        <polyline points="6 9 12 15 18 9" />
+                                    </svg>
+                                </button>
+                                <div class="sim-dropdown-menu" id="sim-dropdown-menu">
+                                    <div class="sim-menu-header">Simulación de Ataques</div>
+                                    <button class="sim-menu-item" id="btn-sim-portscan">
+                                        <span class="sim-dot dot-cyan"></span>
+                                        <div class="sim-item-info">
+                                            <strong>Port Scan</strong>
+                                            <small>15 puertos destino</small>
+                                        </div>
+                                    </button>
+                                    <button class="sim-menu-item" id="btn-sim-synflood">
+                                        <span class="sim-dot dot-amber"></span>
+                                        <div class="sim-item-info">
+                                            <strong>SYN Flood</strong>
+                                            <small>50 paquetes SYN</small>
+                                        </div>
+                                    </button>
+                                    <button class="sim-menu-item" id="btn-sim-bruteforce">
+                                        <span class="sim-dot dot-pink"></span>
+                                        <div class="sim-item-info">
+                                            <strong>Brute Force</strong>
+                                            <small>20 intentos a SSH (Puerto 22)</small>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <span class="events-badge-pill" id="alerts-badge">0 Eventos</span>
+                        </div>
+                    </div>
+
+                    <!-- Table Header -->
+                    <div class="suspicious-table-header">
+                        <span class="col-th col-hora">HORA</span>
+                        <span class="col-th col-tipo">TIPO DE ATAQUE</span>
+                        <span class="col-th col-ip">IP ORIGEN</span>
+                        <span class="col-th col-dst">IP DESTINO</span>
+                        <span class="col-th col-action"></span>
+                    </div>
+
+                    <!-- Scrollable Alerts Container -->
+                    <div class="suspicious-list" id="alerts-tbody">
+                        <div class="empty-state" id="empty-alerts-row">
+                            <p>Esperando actividad... No se han detectado anomalías de seguridad aún.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
