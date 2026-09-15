@@ -1,16 +1,7 @@
 package org.example.ids;
 
-import java.time.Instant;
-import java.util.List;
-
-import org.pcap4j.core.BpfProgram;
-import org.pcap4j.core.NotOpenException;
-import org.pcap4j.core.PacketListener;
-import org.pcap4j.core.PcapAddress;
-import org.pcap4j.core.PcapHandle;
-import org.pcap4j.core.PcapNativeException;
-import org.pcap4j.core.PcapNetworkInterface;
-import org.pcap4j.core.Pcaps;
+import org.example.ids.ui.AlertHistory;
+import org.example.ids.ui.DashboardServer;
 import org.pcap4j.packet.IpV4Packet;
 import org.pcap4j.packet.IpV6Packet;
 import org.pcap4j.packet.Packet;
@@ -19,14 +10,17 @@ import org.pcap4j.packet.UdpPacket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+
 public class MainIDS {
 
     private static final Logger logger = LoggerFactory.getLogger(MainIDS.class);
 
-    // Handle a nivel de clase para poder cerrarlo desde el shutdown hook
-    private PcapHandle handle;
     private final IdsConfig config;
     private final DetectionEngine detectionEngine;
+    private final AlertHistory alertHistory;
+    private final CaptureController captureController;
+    private DashboardServer dashboardServer;
 
     public MainIDS() {
         this(IdsConfig.getInstance());
@@ -35,6 +29,17 @@ public class MainIDS {
     public MainIDS(IdsConfig config) {
         this.config = (config != null) ? config : IdsConfig.getInstance();
         this.detectionEngine = new DetectionEngine(this.config);
+        this.alertHistory = new AlertHistory();
+        this.detectionEngine.setAlertListener(alertHistory::addAlert);
+        this.captureController = new CaptureController(this.config, this.detectionEngine, this);
+
+        if (this.config.isUiEnabled()) {
+            this.dashboardServer = new DashboardServer(this.config.getUiPort(), this.detectionEngine, this.alertHistory, this.captureController);
+        }
+    }
+
+    public CaptureController getCaptureController() {
+        return captureController;
     }
 
     public static void main(String[] args) {
@@ -43,98 +48,34 @@ public class MainIDS {
     }
 
     public void run() {
-        eventsCapture();
-    }
+        // --- SHUTDOWN HOOK: cierre limpio al presionar Ctrl+C ---
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            logger.info("Deteniendo captura y apagando servicios...");
+            if (dashboardServer != null) {
+                dashboardServer.stop();
+            }
+            captureController.stop();
+            detectionEngine.shutdown();
+            logger.info("Cerrado correctamente.");
+        }));
 
-    public void eventsCapture() {
+        if (dashboardServer != null) {
+            try {
+                dashboardServer.start();
+            } catch (Exception e) {
+                logger.error("No se pudo iniciar el Dashboard Web: {}", e.getMessage(), e);
+            }
+        }
+
+        // Iniciar captura a través del CaptureController
+        captureController.start();
+
+        // Mantener el hilo principal vivo mientras la captura o el dashboard estén activos
         try {
-            logger.info("Buscando interfaces de red...");
-            List<PcapNetworkInterface> interfaces = Pcaps.findAllDevs();
-
-            // Si no hay interfaces, no podemos continuar
-            if (interfaces == null || interfaces.isEmpty()) {
-                logger.error("No se detectó ninguna interfaz de red disponible.");
-                return;
-            }
-
-            // Seleccionar dispositivo con IP de red local; fallback al primero
-            PcapNetworkInterface dispositivo = null;
-            for (PcapNetworkInterface nif : interfaces) {
-                if (nif == null || nif.getAddresses() == null) {
-                    continue;
-                }
-                for (PcapAddress addr : nif.getAddresses()) {
-                    if (addr != null && addr.getAddress() != null && addr.getAddress().isSiteLocalAddress()) {
-                        dispositivo = nif;
-                        break;
-                    }
-                }
-                if (dispositivo != null) {
-                    break;
-                }
-            }
-
-            if (dispositivo == null) {
-                dispositivo = interfaces.get(0);
-            }
-
-            logger.info("Dispositivo seleccionado: {} ({})", dispositivo.getName(), dispositivo.getDescription());
-
-            int snaplen = config.getCaptureSnaplen();
-            int timeout = config.getCaptureTimeoutMs();
-            PcapNetworkInterface.PromiscuousMode mode = config.isCapturePromiscuous()
-                    ? PcapNetworkInterface.PromiscuousMode.PROMISCUOUS
-                    : PcapNetworkInterface.PromiscuousMode.NONPROMISCUOUS;
-
-            handle = dispositivo.openLive(snaplen, mode, timeout);
-            handle.setFilter(config.getCaptureFilter(), BpfProgram.BpfCompileMode.OPTIMIZE);
-
-            // --- SHUTDOWN HOOK: cierre limpio al presionar Ctrl+C ---
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                logger.info("Deteniendo captura y apagando servicios...");
-                detectionEngine.shutdown();
-                if (handle != null && handle.isOpen()) {
-                    try {
-                        handle.breakLoop();
-                    } catch (NotOpenException ignored) {
-                    } finally {
-                        handle.close();
-                        logger.info("Cerrado correctamente.");
-                    }
-                }
-            }));
-
-            // --- PACKET LISTENER: conecta captura desacoplada con el pool de workers ---
-            PacketListener listener = packet -> {
-                try {
-                    if (packet == null) {
-                        return;
-                    }
-
-                    Instant ts = Instant.now();
-                    Event event = dataProcess(packet, ts);
-                    if (event != null) {
-                        // Desacoplamiento total: encolar de inmediato en el worker correspondiente (microsegundos)
-                        detectionEngine.submit(event);
-                    }
-                } catch (Throwable t) {
-                    // Blindaje total: ningún fallo en el procesamiento de un paquete derriba la captura
-                    logger.error("Error inesperado al procesar paquete capturado: {}", t.getMessage(), t);
-                }
-            };
-
-            logger.info("Iniciando captura de paquetes (Ctrl+C para detener)...");
-            handle.loop(-1, listener);
-
-        } catch (PcapNativeException e) {
-            logger.error("Error de Npcap (¿permisos de administrador?): {}", e.getMessage(), e);
-        } catch (NotOpenException e) {
-            logger.error("El handle fue cerrado inesperadamente: {}", e.getMessage(), e);
+            Thread.currentThread().join();
         } catch (InterruptedException e) {
             logger.info("Captura interrumpida.");
             Thread.currentThread().interrupt();
-        } catch (Throwable t) {
-            logger.error("Error no controlado en la captura de eventos: {}", t.getMessage(), t);
         }
     }
 
