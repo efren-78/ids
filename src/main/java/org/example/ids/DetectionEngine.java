@@ -32,6 +32,7 @@ public class DetectionEngine {
 
     private final AtomicLong processedEventsCounter = new AtomicLong(0);
     private final AtomicLong droppedEventsCounter = new AtomicLong(0);
+    private java.util.function.Consumer<Event> alertListener;
 
     // Hilo daemon que purga datos expirados periódicamente
     private final ScheduledExecutorService cleaner =
@@ -135,6 +136,14 @@ public class DetectionEngine {
                         detector.getClass().getSimpleName(), e.getMessage(), e);
             }
         }
+    }
+
+    public void setAlertListener(java.util.function.Consumer<Event> alertListener) {
+        this.alertListener = alertListener;
+    }
+
+    public List<Detector> getDetectors() {
+        return detectors;
     }
 
     /**
@@ -243,6 +252,13 @@ public class DetectionEngine {
 
                         if (event.getEventType() != Event.EventType.NORMAL) {
                             logger.warn("ALERTA: {}", event);
+                            if (alertListener != null) {
+                                try {
+                                    alertListener.accept(event);
+                                } catch (Exception ex) {
+                                    logger.error("Error en alertListener: {}", ex.getMessage());
+                                }
+                            }
                         } else if (logger.isDebugEnabled()) {
                             logger.debug("Evento: {}", event);
                         }
