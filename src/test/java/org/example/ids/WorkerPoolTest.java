@@ -47,6 +47,13 @@ class WorkerPoolTest {
         // Esperar a que los workers procesen los eventos en paralelo
         boolean finished = latch.await(5, TimeUnit.SECONDS);
         assertTrue(finished, "Todos los eventos debieron ser procesados por los workers");
+        
+        // Esperar a que los contadores atómicos reflejen el fin del ciclo de los workers
+        long deadline = System.currentTimeMillis() + 1000;
+        while (engine.getProcessedCount() < totalEvents && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
+
         assertEquals(totalEvents, engine.getProcessedCount());
         assertEquals(0, engine.getDroppedCount());
 
