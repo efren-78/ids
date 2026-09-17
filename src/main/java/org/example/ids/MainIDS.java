@@ -34,7 +34,7 @@ public class MainIDS {
         this.captureController = new CaptureController(this.config, this.detectionEngine, this);
 
         if (this.config.isUiEnabled()) {
-            this.dashboardServer = new DashboardServer(this.config.getUiPort(), this.detectionEngine, this.alertHistory, this.captureController);
+            this.dashboardServer = new DashboardServer(this.config.getUiPort(), this.detectionEngine, this.alertHistory, this.captureController, this.config);
         }
     }
 

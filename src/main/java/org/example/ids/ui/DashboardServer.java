@@ -1,11 +1,15 @@
 package org.example.ids.ui;
 
+import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.example.ids.CaptureController;
 import org.example.ids.DetectionEngine;
 import org.example.ids.Event;
+import org.example.ids.IdsConfig;
+import org.example.ids.auth.AuthFilter;
+import org.example.ids.auth.AuthManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +38,7 @@ public class DashboardServer {
     private final DetectionEngine detectionEngine;
     private final AlertHistory alertHistory;
     private final CaptureController captureController;
+    private final AuthManager authManager;
     private HttpServer server;
 
     private final List<OutputStream> sseClients = new CopyOnWriteArrayList<>();
@@ -41,11 +46,13 @@ public class DashboardServer {
     /**
      * Constructor completo con CaptureController para control de monitoreo.
      */
-    public DashboardServer(int port, DetectionEngine detectionEngine, AlertHistory alertHistory, CaptureController captureController) {
+    public DashboardServer(int port, DetectionEngine detectionEngine, AlertHistory alertHistory,
+                           CaptureController captureController, IdsConfig config) {
         this.port = port;
         this.detectionEngine = detectionEngine;
         this.alertHistory = alertHistory;
         this.captureController = captureController;
+        this.authManager = new AuthManager((config != null) ? config : IdsConfig.getInstance());
 
         if (this.alertHistory != null) {
             this.alertHistory.addListener(this::broadcastAlertToSse);
@@ -53,10 +60,22 @@ public class DashboardServer {
     }
 
     /**
-     * Constructor de compatibilidad (usado en tests).
+     * Constructor de compatibilidad (usado en tests y llamadas sin config explícito).
+     */
+    public DashboardServer(int port, DetectionEngine detectionEngine, AlertHistory alertHistory,
+                           CaptureController captureController) {
+        this(port, detectionEngine, alertHistory, captureController, null);
+    }
+
+    /**
+     * Constructor de compatibilidad mínimo (usado en tests).
      */
     public DashboardServer(int port, DetectionEngine detectionEngine, AlertHistory alertHistory) {
-        this(port, detectionEngine, alertHistory, null);
+        this(port, detectionEngine, alertHistory, null, null);
+    }
+
+    public AuthManager getAuthManager() {
+        return authManager;
     }
 
     public synchronized void start() throws IOException {
@@ -71,21 +90,48 @@ public class DashboardServer {
             return t;
         }));
 
-        // Rutas estáticas
-        server.createContext("/", new StaticFileHandler("web/index.html", "text/html; charset=UTF-8"));
-        server.createContext("/style.css", new StaticFileHandler("web/style.css", "text/css; charset=UTF-8"));
-        server.createContext("/app.js", new StaticFileHandler("web/app.js", "application/javascript; charset=UTF-8"));
+        AuthFilter authFilter = new AuthFilter(authManager);
 
-        // Endpoints API
-        server.createContext("/api/stats", new StatsHandler());
-        server.createContext("/api/alerts", new AlertsHandler());
-        server.createContext("/api/stream", new SseStreamHandler());
-        server.createContext("/api/simulate", new SimulateHandler());
-        server.createContext("/api/monitor", new MonitorHandler());
+        // --- Rutas PÚBLICAS (sin autenticación) ---
+        server.createContext("/login", new StaticFileHandler("web/login.html", "text/html; charset=UTF-8"));
+        server.createContext("/style-login.css", new StaticFileHandler("web/style-login.css", "text/css; charset=UTF-8"));
+        server.createContext("/api/login", new LoginHandler());
+
+        // --- Rutas PROTEGIDAS (requieren sesión válida) ---
+        HttpContext ctxRoot = server.createContext("/", new StaticFileHandler("web/index.html", "text/html; charset=UTF-8"));
+        ctxRoot.getFilters().add(authFilter);
+
+        HttpContext ctxCss = server.createContext("/style.css", new StaticFileHandler("web/style.css", "text/css; charset=UTF-8"));
+        ctxCss.getFilters().add(authFilter);
+
+        HttpContext ctxJs = server.createContext("/app.js", new StaticFileHandler("web/app.js", "application/javascript; charset=UTF-8"));
+        ctxJs.getFilters().add(authFilter);
+
+        // Endpoints API protegidos
+        HttpContext ctxStats = server.createContext("/api/stats", new StatsHandler());
+        ctxStats.getFilters().add(authFilter);
+
+        HttpContext ctxAlerts = server.createContext("/api/alerts", new AlertsHandler());
+        ctxAlerts.getFilters().add(authFilter);
+
+        HttpContext ctxStream = server.createContext("/api/stream", new SseStreamHandler());
+        ctxStream.getFilters().add(authFilter);
+
+        HttpContext ctxSimulate = server.createContext("/api/simulate", new SimulateHandler());
+        ctxSimulate.getFilters().add(authFilter);
+
+        HttpContext ctxMonitor = server.createContext("/api/monitor", new MonitorHandler());
+        ctxMonitor.getFilters().add(authFilter);
+
+        HttpContext ctxLogout = server.createContext("/api/logout", new LogoutHandler());
+        ctxLogout.getFilters().add(authFilter);
 
         server.start();
         logger.info("=================================================================");
         logger.info("IDS DASHBOARD ACTIVO: Accede en http://localhost:{}", port);
+        if (authManager.isAuthEnabled()) {
+            logger.info("Autenticación activa. Accede con las credenciales configuradas.");
+        }
         logger.info("=================================================================");
     }
 
@@ -154,6 +200,76 @@ public class DashboardServer {
                     os.write(responseBytes);
                 }
             }
+        }
+    }
+
+    private class LoginHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "text/plain", "Método no permitido");
+                return;
+            }
+
+            // Leer body del request
+            String body;
+            try (InputStream is = exchange.getRequestBody()) {
+                body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            // Parsear username y password del body (formato: username=X&password=Y)
+            String username = null;
+            String password = null;
+
+            for (String param : body.split("&")) {
+                String[] kv = param.split("=", 2);
+                if (kv.length == 2) {
+                    String key = java.net.URLDecoder.decode(kv[0], StandardCharsets.UTF_8);
+                    String value = java.net.URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
+                    if ("username".equals(key)) {
+                        username = value;
+                    } else if ("password".equals(key)) {
+                        password = value;
+                    }
+                }
+            }
+
+            if (authManager.authenticate(username, password)) {
+                String token = authManager.createSession();
+
+                exchange.getResponseHeaders().set("Set-Cookie",
+                        "IDS_SESSION=" + token + "; Path=/; HttpOnly; SameSite=Strict");
+                sendResponse(exchange, 200, "application/json; charset=UTF-8",
+                        "{\"status\":\"OK\",\"message\":\"Autenticación exitosa\"}");
+                logger.info("Login exitoso para usuario: {}", username);
+            } else {
+                sendResponse(exchange, 401, "application/json; charset=UTF-8",
+                        "{\"status\":\"UNAUTHORIZED\",\"message\":\"Credenciales incorrectas\"}");
+                logger.warn("Intento de login fallido para usuario: {}", username);
+            }
+        }
+    }
+
+    private class LogoutHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "text/plain", "Método no permitido");
+                return;
+            }
+
+            String cookieHeader = exchange.getRequestHeaders().getFirst("Cookie");
+            String token = AuthManager.extractSessionToken(cookieHeader);
+
+            if (token != null) {
+                authManager.invalidateSession(token);
+            }
+
+            // Limpiar cookie
+            exchange.getResponseHeaders().set("Set-Cookie",
+                    "IDS_SESSION=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0");
+            sendResponse(exchange, 200, "application/json; charset=UTF-8",
+                    "{\"status\":\"OK\",\"message\":\"Sesión cerrada\"}");
         }
     }
 
