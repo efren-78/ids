@@ -3,6 +3,7 @@ package org.example.ids.ui;
 import org.example.ids.DetectionEngine;
 import org.example.ids.Event;
 import org.example.ids.IdsConfig;
+import org.example.ids.auth.AuthManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,12 +25,17 @@ class DashboardServerTest {
     private DashboardServer server;
     private int port;
     private HttpClient client;
+    private String sessionCookie;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() throws IOException, InterruptedException {
         Properties props = new Properties();
         props.setProperty("ids.engine.worker.count", "2");
         props.setProperty("ids.engine.queue.capacity", "50");
+        props.setProperty("ids.auth.enabled", "true");
+        props.setProperty("ids.auth.username", "testuser");
+        props.setProperty("ids.auth.password", "testpass");
+        props.setProperty("ids.auth.session.timeout.minutes", "30");
         IdsConfig config = new IdsConfig(props);
 
         engine = new DetectionEngine(config);
@@ -38,10 +44,15 @@ class DashboardServerTest {
 
         // Usar puerto de prueba no estándar para evitar conflictos
         port = 18088;
-        server = new DashboardServer(port, engine, alertHistory);
+        server = new DashboardServer(port, engine, alertHistory, null, config);
         server.start();
 
-        client = HttpClient.newHttpClient();
+        client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+
+        // Obtener cookie de sesión autenticada para los tests protegidos
+        sessionCookie = loginAndGetCookie("testuser", "testpass");
     }
 
     @AfterEach
@@ -54,10 +65,86 @@ class DashboardServerTest {
         }
     }
 
+    private String loginAndGetCookie(String username, String password) throws IOException, InterruptedException {
+        String body = "username=" + username + "&password=" + password;
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/login"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, resp.statusCode());
+
+        // Extraer Set-Cookie header
+        String setCookie = resp.headers().firstValue("Set-cookie").orElse(
+                resp.headers().firstValue("set-cookie").orElse(null)
+        );
+        assertNotNull(setCookie, "El servidor debe retornar Set-Cookie con el token de sesión");
+        assertTrue(setCookie.contains("IDS_SESSION="));
+
+        // Extraer solo la parte del cookie para usarla en requests posteriores
+        return setCookie.split(";")[0];
+    }
+
+    // --- Tests de autenticación ---
+
+    @Test
+    void rutaProtegidaSinSesionRetorna302Redirect() throws IOException, InterruptedException {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/"))
+                .GET()
+                .build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(302, resp.statusCode());
+        assertTrue(resp.headers().firstValue("Location").orElse("").contains("/login"));
+    }
+
+    @Test
+    void apiProtegidaSinSesionRetorna401() throws IOException, InterruptedException {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/stats"))
+                .GET()
+                .build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(401, resp.statusCode());
+        assertTrue(resp.body().contains("UNAUTHORIZED"));
+    }
+
+    @Test
+    void loginPageAccesibleSinAutenticacion() throws IOException, InterruptedException {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/login"))
+                .GET()
+                .build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(200, resp.statusCode());
+        assertTrue(resp.headers().firstValue("Content-Type").orElse("").contains("text/html"));
+    }
+
+    @Test
+    void loginFallidoRetorna401() throws IOException, InterruptedException {
+        String body = "username=hacker&password=wrong";
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/login"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(401, resp.statusCode());
+        assertTrue(resp.body().contains("UNAUTHORIZED"));
+    }
+
+    // --- Tests del dashboard autenticado ---
+
     @Test
     void testServeIndexHtml() throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/"))
+                .header("Cookie", sessionCookie)
                 .GET()
                 .build();
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
@@ -71,6 +158,7 @@ class DashboardServerTest {
     void testServeCssAndJs() throws IOException, InterruptedException {
         HttpRequest cssReq = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/style.css"))
+                .header("Cookie", sessionCookie)
                 .GET()
                 .build();
         HttpResponse<String> cssResp = client.send(cssReq, HttpResponse.BodyHandlers.ofString());
@@ -79,6 +167,7 @@ class DashboardServerTest {
 
         HttpRequest jsReq = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/app.js"))
+                .header("Cookie", sessionCookie)
                 .GET()
                 .build();
         HttpResponse<String> jsResp = client.send(jsReq, HttpResponse.BodyHandlers.ofString());
@@ -90,6 +179,7 @@ class DashboardServerTest {
     void testApiStats() throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/api/stats"))
+                .header("Cookie", sessionCookie)
                 .GET()
                 .build();
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
@@ -115,6 +205,7 @@ class DashboardServerTest {
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/api/alerts"))
+                .header("Cookie", sessionCookie)
                 .GET()
                 .build();
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
@@ -128,6 +219,7 @@ class DashboardServerTest {
     void testApiSimulate() throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/api/simulate?type=bruteforce"))
+                .header("Cookie", sessionCookie)
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
@@ -135,5 +227,29 @@ class DashboardServerTest {
         assertEquals(200, resp.statusCode());
         assertTrue(resp.body().contains("\"status\":\"OK\""));
         assertTrue(resp.body().contains("bruteforce"));
+    }
+
+    @Test
+    void testLogout() throws IOException, InterruptedException {
+        // Verificar que la sesión funciona antes del logout
+        HttpRequest statsReq = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/stats"))
+                .header("Cookie", sessionCookie)
+                .GET()
+                .build();
+        assertEquals(200, client.send(statsReq, HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        // Ejecutar logout
+        HttpRequest logoutReq = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/logout"))
+                .header("Cookie", sessionCookie)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> logoutResp = client.send(logoutReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, logoutResp.statusCode());
+
+        // Verificar que la sesión ya no es válida después del logout
+        HttpResponse<String> afterLogout = client.send(statsReq, HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, afterLogout.statusCode());
     }
 }
