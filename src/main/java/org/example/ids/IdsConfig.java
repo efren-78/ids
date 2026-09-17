@@ -219,6 +219,23 @@ public class IdsConfig {
     public int getUiPort() {
         return getInt("ids.ui.port", 8080);
     }
+
+    // --- Helpers de Autenticación del Dashboard ---
+    public boolean isAuthEnabled() {
+        return getBoolean("ids.auth.enabled", true);
+    }
+
+    public String getAuthUsername() {
+        return getString("ids.auth.username", "admin");
+    }
+
+    public String getAuthPassword() {
+        return getString("ids.auth.password", "admin");
+    }
+
+    public int getAuthSessionTimeoutMinutes() {
+        return getInt("ids.auth.session.timeout.minutes", 30);
+    }
 }
 
 
