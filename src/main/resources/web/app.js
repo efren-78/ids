@@ -3,6 +3,28 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Auth: intercept 401 responses globally ---
+    const originalFetch = window.fetch;
+    window.fetch = async function (...args) {
+        const response = await originalFetch.apply(this, args);
+        if (response.status === 401) {
+            window.location.href = '/login';
+            return response;
+        }
+        return response;
+    };
+
+    // --- Logout Handler ---
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) {
+        btnLogout.addEventListener('click', () => {
+            fetch('/api/logout', { method: 'POST' })
+                .finally(() => {
+                    window.location.href = '/login';
+                });
+        });
+    }
+
     // --- State Variables ---
     let lastProcessedCount = 0;
     let lastTimestamp = Date.now();

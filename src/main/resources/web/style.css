@@ -195,6 +195,19 @@ body {
     border-color: rgba(0, 242, 254, 0.4);
 }
 
+.header-separator {
+    width: 1px;
+    height: 22px;
+    background: var(--border-color);
+    margin: 0 4px;
+}
+
+.btn-logout:hover {
+    background: rgba(255, 45, 117, 0.12);
+    color: var(--alert-pink);
+    border-color: rgba(255, 45, 117, 0.35);
+}
+
 /* -------------------------------------------------------------
    2. MAIN 2-COLUMN DASHBOARD GRID
    ------------------------------------------------------------- */
