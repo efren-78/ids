@@ -20,16 +20,20 @@ public class CaptureController {
 
     private final IdsConfig config;
     private final DetectionEngine detectionEngine;
-    private final MainIDS mainIDS;
+    private final PacketParser packetParser;
 
     private volatile State state = State.STOPPED;
     private volatile PcapHandle handle;
     private volatile Thread captureThread;
 
-    public CaptureController(IdsConfig config, DetectionEngine detectionEngine, MainIDS mainIDS) {
+    public CaptureController(IdsConfig config, DetectionEngine detectionEngine) {
+        this(config, detectionEngine, new PacketParser());
+    }
+
+    public CaptureController(IdsConfig config, DetectionEngine detectionEngine, PacketParser packetParser) {
         this.config = config;
         this.detectionEngine = detectionEngine;
-        this.mainIDS = mainIDS;
+        this.packetParser = (packetParser != null) ? packetParser : new PacketParser();
     }
 
     public synchronized State getState() {
@@ -151,7 +155,7 @@ public class CaptureController {
                         return;
                     }
                     Instant ts = Instant.now();
-                    Event event = mainIDS.dataProcess(packet, ts);
+                    Event event = packetParser.parse(packet, ts);
                     if (event != null) {
                         detectionEngine.submit(event);
                     }
