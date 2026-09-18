@@ -3,6 +3,7 @@ package org.example.ids;
 import org.example.ids.detectors.BruteForceDetector;
 import org.example.ids.detectors.Detector;
 import org.example.ids.detectors.PortScanDetector;
+import org.example.ids.detectors.SuspiciousPortDetector;
 import org.example.ids.detectors.SynFloodDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +54,7 @@ public class DetectionEngine {
         detectors.add(new PortScanDetector(cfg));
         detectors.add(new SynFloodDetector(cfg));
         detectors.add(new BruteForceDetector(cfg));
+        detectors.add(new SuspiciousPortDetector(cfg));
 
         int workerCount = cfg.getEngineWorkerCount();
         this.queueCapacity = cfg.getEngineQueueCapacity();

@@ -211,6 +211,36 @@ public class IdsConfig {
         return ports;
     }
 
+    // --- Helpers de Puertos Sospechosos / Malware C2 ---
+    public long getSuspiciousPortWindowMs() {
+        return getLong("ids.detector.suspiciousport.window.ms", 10000L);
+    }
+
+    public int getSuspiciousPortThreshold() {
+        return getInt("ids.detector.suspiciousport.threshold", 1);
+    }
+
+    public long getSuspiciousPortMaxCapacity() {
+        return getLong("ids.detector.suspiciousport.max.capacity", 50000L);
+    }
+
+    public java.util.Set<Integer> getSuspiciousPorts() {
+        String portsStr = getString("ids.detector.suspiciousport.ports", "4444,1337,31337,6667,5555,8088,9001,27374");
+        java.util.Set<Integer> ports = new java.util.HashSet<>();
+        if (portsStr != null && !portsStr.isBlank()) {
+            for (String p : portsStr.split(",")) {
+                try {
+                    ports.add(Integer.parseInt(p.trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        if (ports.isEmpty()) {
+            ports.addAll(java.util.List.of(4444, 1337, 31337, 6667, 5555, 8088, 9001, 27374));
+        }
+        return ports;
+    }
+
     // --- Helpers de Servidor UI ---
     public boolean isUiEnabled() {
         return getBoolean("ids.ui.enabled", true);
