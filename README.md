@@ -105,6 +105,7 @@ ids/
 │   │           │   └── AuthManager.java    # Gestor de sesiones, credenciales y expiración
 │   │           ├── detectors/              # Detectores de intrusiones
 │   │           │   ├── Detector.java       # Interfaz base de detectores
+│   │           │   ├── DetectorLoader.java # Cargador dinámico de detectores por escaneo automático
 │   │           │   ├── PortScanDetector.java       # Detección de escaneos de puertos
 │   │           │   ├── SynFloodDetector.java       # Detección de ataques SYN Flood
 │   │           │   ├── BruteForceDetector.java     # Detección de ataques de fuerza bruta
