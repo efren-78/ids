@@ -36,6 +36,11 @@ class IdsConfigTest {
         assertEquals(20, config.getBruteForceThreshold());
         assertEquals(50000L, config.getBruteForceMaxCapacity());
         assertTrue(config.getBruteForceTargetPorts().containsAll(Set.of(21, 22, 23, 3389, 3306, 5432)));
+
+        assertEquals(10000L, config.getSuspiciousPortWindowMs());
+        assertEquals(1, config.getSuspiciousPortThreshold());
+        assertEquals(50000L, config.getSuspiciousPortMaxCapacity());
+        assertTrue(config.getSuspiciousPorts().containsAll(Set.of(4444, 1337, 31337, 6667, 5555, 8088, 9001, 27374)));
     }
 
     @Test

@@ -99,5 +99,23 @@ class DetectionEngineTest {
 
         assertEquals(Event.EventType.BRUTE_FORCE, ultimoEvento.getEventType());
     }
+
+    // Test donde detecta conexión a puerto sospechoso (Metasploit / C2)
+    @Test
+    void detectaSuspiciousPortCorrectamente() {
+        Event event = new Event();
+        event.setTimestamp(Instant.now());
+        event.setSrcIp("10.0.0.6");
+        event.setDstIp("192.168.1.50");
+        event.setSrcPort(45000);
+        event.setDstPort(4444); // Metasploit
+        event.setProtocol("TCP");
+        event.setSyn(true);
+        event.setAck(false);
+
+        engine.analyze(event);
+
+        assertEquals(Event.EventType.SUSPICIOUS_CONNECTION, event.getEventType());
+    }
 }
 

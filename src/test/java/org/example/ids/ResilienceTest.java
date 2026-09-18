@@ -1,7 +1,9 @@
 package org.example.ids;
 
+import org.example.ids.detectors.BruteForceDetector;
 import org.example.ids.detectors.Detector;
 import org.example.ids.detectors.PortScanDetector;
+import org.example.ids.detectors.SuspiciousPortDetector;
 import org.example.ids.detectors.SynFloodDetector;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -113,10 +115,14 @@ class ResilienceTest {
     void detectorsHandleNullAndEmptyFieldsGracefully() {
         PortScanDetector portScanDetector = new PortScanDetector();
         SynFloodDetector synFloodDetector = new SynFloodDetector();
+        BruteForceDetector bruteForceDetector = new BruteForceDetector();
+        org.example.ids.detectors.SuspiciousPortDetector suspiciousPortDetector = new org.example.ids.detectors.SuspiciousPortDetector();
 
         Event nullEvent = null;
         assertDoesNotThrow(() -> portScanDetector.analyze(nullEvent));
         assertDoesNotThrow(() -> synFloodDetector.analyze(nullEvent));
+        assertDoesNotThrow(() -> bruteForceDetector.analyze(nullEvent));
+        assertDoesNotThrow(() -> suspiciousPortDetector.analyze(nullEvent));
 
         Event emptyEvent = new Event();
         emptyEvent.setSrcIp(null);
@@ -125,9 +131,13 @@ class ResilienceTest {
 
         assertDoesNotThrow(() -> portScanDetector.analyze(emptyEvent));
         assertDoesNotThrow(() -> synFloodDetector.analyze(emptyEvent));
+        assertDoesNotThrow(() -> bruteForceDetector.analyze(emptyEvent));
+        assertDoesNotThrow(() -> suspiciousPortDetector.analyze(emptyEvent));
 
         assertDoesNotThrow(portScanDetector::purgeExpired);
         assertDoesNotThrow(synFloodDetector::purgeExpired);
+        assertDoesNotThrow(bruteForceDetector::purgeExpired);
+        assertDoesNotThrow(suspiciousPortDetector::purgeExpired);
     }
 
     @Test
