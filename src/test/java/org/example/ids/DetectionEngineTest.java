@@ -51,6 +51,8 @@ class DetectionEngineTest {
             ultimoEvento.setSrcPort(20000);
             ultimoEvento.setDstPort(i);
             ultimoEvento.setProtocol("TCP");
+            ultimoEvento.setSyn(true);
+            ultimoEvento.setAck(false);
 
             engine.analyze(ultimoEvento);
         }

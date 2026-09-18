@@ -151,6 +151,10 @@ class ResilienceTest {
         for (int i = 1; i <= 100; i++) {
             Event eventPortScan = new Event();
             eventPortScan.setSrcIp("10.0.0." + i);
+            eventPortScan.setDstIp("192.168.1.1");
+            eventPortScan.setProtocol("TCP");
+            eventPortScan.setSyn(true);
+            eventPortScan.setAck(false);
             eventPortScan.setDstPort(80);
             portScanDetector.analyze(eventPortScan);
 

@@ -2,87 +2,138 @@ package org.example.ids.detectors;
 
 import org.example.ids.Event;
 import org.junit.jupiter.api.Test;
+
 import java.time.Instant;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class PortScanDetectorTest {
 
-    // Helper para crear un evento con un puerto destino específico
-    private Event crearEvento(String srcIp, int dstPort) {
+    private Event crearEventoTcpSyn(String srcIp, String dstIp, int dstPort) {
         Event event = new Event();
         event.setTimestamp(Instant.now());
         event.setSrcIp(srcIp);
-        event.setDstIp("192.168.1.100");
-        event.setSrcPort(12345);
+        event.setDstIp(dstIp);
+        event.setSrcPort(45000);
         event.setDstPort(dstPort);
         event.setProtocol("TCP");
+        event.setSyn(true);
+        event.setAck(false);
         return event;
     }
 
     @Test
-    void detectaPortScanCuandoSeExcedeUmbral() {
-        // 1. ARRANGE — preparar los objetos
+    void detectaPortScanCuandoSeExcedeUmbralEnMismoDestino() {
         PortScanDetector detector = new PortScanDetector();
-        String ipAtacante = "10.0.0.1";
+        String atacante = "10.0.0.1";
+        String victima = "192.168.1.100";
 
-        // 2. ACT — enviar 15 eventos con puertos distintos (umbral = 15)
         Event ultimoEvento = null;
         for (int i = 1; i <= 15; i++) {
-            ultimoEvento = crearEvento(ipAtacante, i);
+            ultimoEvento = crearEventoTcpSyn(atacante, victima, i);
             detector.analyze(ultimoEvento);
         }
 
-        // 3. ASSERT — el último evento debe ser clasificado como PORT_SCAN
+        assertNotNull(ultimoEvento);
         assertEquals(Event.EventType.PORT_SCAN, ultimoEvento.getEventType());
+        assertEquals(15, ultimoEvento.getNumberOfPorts());
     }
 
     @Test
     void noDetectaPortScanPorDebajoDelUmbral() {
-        // 1. ARRANGE
         PortScanDetector detector = new PortScanDetector();
-        String ipNormal = "10.0.0.2";
+        String atacante = "10.0.0.2";
+        String victima = "192.168.1.100";
 
-        // 2. ACT — enviar solo 14 eventos (por debajo del umbral de 15)
         Event ultimoEvento = null;
         for (int i = 1; i <= 14; i++) {
-            ultimoEvento = crearEvento(ipNormal, i);
+            ultimoEvento = crearEventoTcpSyn(atacante, victima, i);
             detector.analyze(ultimoEvento);
         }
 
-        // 3. ASSERT — debe seguir como NORMAL
+        assertNotNull(ultimoEvento);
         assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
     }
 
     @Test
-    void mismosPuertosNoDisparanAlerta() {
-        // 1. ARRANGE
+    void traficoEstablecidoNoEsPortScan() {
         PortScanDetector detector = new PortScanDetector();
-        String ipRepetitiva = "10.0.0.3";
+        String srcIp = "192.168.1.50";
+        String dstIp = "192.168.1.1";
 
-        // 2. ACT — enviar 20 eventos pero todos al mismo puerto
+        // Paquetes TCP ACK establecidos (navegación o transferencia normal de datos)
         Event ultimoEvento = null;
-        for (int i = 0; i < 20; i++) {
-            ultimoEvento = crearEvento(ipRepetitiva, 80); // siempre puerto 80
+        for (int i = 1; i <= 20; i++) {
+            ultimoEvento = new Event();
+            ultimoEvento.setSrcIp(srcIp);
+            ultimoEvento.setDstIp(dstIp);
+            ultimoEvento.setDstPort(i);
+            ultimoEvento.setProtocol("TCP");
+            ultimoEvento.setSyn(false);
+            ultimoEvento.setAck(true);
             detector.analyze(ultimoEvento);
         }
 
-        // 3. ASSERT — no es port scan porque es un solo puerto
-        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
+        assertNotNull(ultimoEvento);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType(), "Tráfico establecido no debe clasificarse como port scan");
     }
 
     @Test
-    void diferentesIPsNoSeAcumulan() {
-        // 1. ARRANGE
+    void navegacionA15SitiosDiferentesNoDisparaAlerta() {
         PortScanDetector detector = new PortScanDetector();
+        String miPc = "192.168.1.50";
 
-        // 2. ACT — 15 puertos distintos pero desde IPs diferentes
+        // Mi PC abriendo conexiones legítimas a 15 servidores web distintos (cada uno en puerto 443 o 80)
         Event ultimoEvento = null;
         for (int i = 1; i <= 15; i++) {
-            ultimoEvento = crearEvento("10.0.0." + i, i); // cada evento de IP distinta
+            ultimoEvento = crearEventoTcpSyn(miPc, "93.184.216." + i, 443);
             detector.analyze(ultimoEvento);
         }
 
-        // 3. ASSERT — ninguna IP individual supera el umbral
-        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType());
+        assertNotNull(ultimoEvento);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType(), "Conexiones a destinos diferentes no deben acumularse como port scan");
+    }
+
+    @Test
+    void consultasDnsMultiplesNoDisparanAlerta() {
+        PortScanDetector detector = new PortScanDetector();
+        String miPc = "192.168.1.50";
+        String dnsServer = "192.168.1.1";
+
+        // 30 consultas DNS al mismo puerto 53
+        Event ultimoEvento = null;
+        for (int i = 1; i <= 30; i++) {
+            ultimoEvento = new Event();
+            ultimoEvento.setSrcIp(miPc);
+            ultimoEvento.setDstIp(dnsServer);
+            ultimoEvento.setSrcPort(50000 + i);
+            ultimoEvento.setDstPort(53); // Siempre puerto 53
+            ultimoEvento.setProtocol("UDP");
+            detector.analyze(ultimoEvento);
+        }
+
+        assertNotNull(ultimoEvento);
+        assertEquals(Event.EventType.NORMAL, ultimoEvento.getEventType(), "Consultas repetidas al puerto 53 no deben disparar port scan");
+    }
+
+    @Test
+    void detectaEscaneoUdpAMultiplesPuertosEnMismoDestino() {
+        PortScanDetector detector = new PortScanDetector();
+        String atacante = "10.0.0.5";
+        String victima = "192.168.1.10";
+
+        Event ultimoEvento = null;
+        for (int i = 1; i <= 15; i++) {
+            ultimoEvento = new Event();
+            ultimoEvento.setSrcIp(atacante);
+            ultimoEvento.setDstIp(victima);
+            ultimoEvento.setSrcPort(40000);
+            ultimoEvento.setDstPort(i * 10);
+            ultimoEvento.setProtocol("UDP");
+            detector.analyze(ultimoEvento);
+        }
+
+        assertNotNull(ultimoEvento);
+        assertEquals(Event.EventType.PORT_SCAN, ultimoEvento.getEventType());
     }
 }

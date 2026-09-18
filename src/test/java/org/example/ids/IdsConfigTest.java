@@ -82,6 +82,10 @@ class IdsConfigTest {
         for (int i = 1; i <= 5; i++) {
             lastPortScanEvent = new Event();
             lastPortScanEvent.setSrcIp("10.10.10.10");
+            lastPortScanEvent.setDstIp("192.168.1.1");
+            lastPortScanEvent.setProtocol("TCP");
+            lastPortScanEvent.setSyn(true);
+            lastPortScanEvent.setAck(false);
             lastPortScanEvent.setDstPort(80 + i);
             portScanDetector.analyze(lastPortScanEvent);
         }
