@@ -1,6 +1,6 @@
 # Sistema de Detección de Intrusiones (IDS)
 
-Sistema de detección de intrusiones, capaz de analizar flujos de red y detectar anomalías como escaneos de puertos, ataques de SYN flood y ataques de fuerza bruta (SSH, FTP, Telnet, RDP, bases de datos). El proyecto está construido sobre Maven y utiliza un enfoque en tiempo real con captura en vivo mediante procesamiento asíncrono multihilo.
+Sistema de detección de intrusiones, capaz de analizar flujos de red y detectar anomalías como escaneos de puertos, ataques de SYN flood, ataques de fuerza bruta (SSH, FTP, Telnet, RDP, bases de datos) y conexiones a puertos sospechosos de malware / canales de comando y control (C2). El proyecto está construido sobre Maven y utiliza un enfoque en tiempo real con captura en vivo mediante procesamiento asíncrono multihilo.
 
 El sistema es desacoplado, lo cual permite agregar nuevos detectores de intrusiones de forma sencilla sin afectar el funcionamiento del sistema.
 
@@ -60,14 +60,15 @@ El sistema cuenta con protección de acceso basada en sesiones:
 * **Usuario:** `admin`
 * **Contraseña:** `admin`
 
-### Configuración del Servidor y Autenticación
+### Configuración del Servidor y Detectores
 
-Puedes personalizar las propiedades del Dashboard y la seguridad en el archivo `ids.properties`:
+Puedes personalizar las propiedades del Dashboard, la seguridad y los detectores en el archivo `ids.properties`:
 * `ids.ui.enabled`: Habilita o deshabilita la interfaz web (`true`/`false`).
 * `ids.ui.port`: Puerto del servidor web (por defecto `8080`).
 * `ids.auth.enabled`: Habilita o deshabilita el inicio de sesión obligatorio (`true`/`false`).
 * `ids.auth.username` / `ids.auth.password`: Credenciales de acceso del usuario administrador.
 * `ids.auth.session.timeout.minutes`: Tiempo de expiración de sesión (por defecto `30` minutos).
+* `ids.detector.suspiciousport.ports`: Lista de puertos en lista negra / C2 (por defecto `4444,1337,31337,6667,5555,8088,9001,27374`).
 
 ### Limpiar el Proyecto
 
@@ -104,9 +105,10 @@ ids/
 │   │           │   └── AuthManager.java    # Gestor de sesiones, credenciales y expiración
 │   │           ├── detectors/              # Detectores de intrusiones
 │   │           │   ├── Detector.java       # Interfaz base de detectores
-│   │           │   ├── PortScanDetector.java   # Detección de escaneos de puertos
-│   │           │   ├── SynFloodDetector.java   # Detección de ataques SYN Flood
-│   │           │   └── BruteForceDetector.java # Detección de ataques de fuerza bruta
+│   │           │   ├── PortScanDetector.java       # Detección de escaneos de puertos
+│   │           │   ├── SynFloodDetector.java       # Detección de ataques SYN Flood
+│   │           │   ├── BruteForceDetector.java     # Detección de ataques de fuerza bruta
+│   │           │   └── SuspiciousPortDetector.java # Detección de backdoors y malware C2
 │   │           └── ui/                     # Servidor y UI del Dashboard SOC
 │   │               ├── AlertHistory.java   # Historial en memoria de alertas emitidas
 │   │               └── DashboardServer.java # Servidor HTTP embebido y endpoints REST/SSE
