@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSimPortScan = document.getElementById('btn-sim-portscan');
     const btnSimSynFlood = document.getElementById('btn-sim-synflood');
     const btnSimBruteForce = document.getElementById('btn-sim-bruteforce');
+    const btnSimSuspicious = document.getElementById('btn-sim-suspicious');
 
     // Monitor Control Buttons
     const btnMonitorStart = document.getElementById('btn-monitor-start');
@@ -336,6 +337,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (alert.eventType === 'SYN_FLOOD') {
             badgeClass = 'badge-syn-flood';
             badgeText = 'SYN_FLOOD';
+        } else if (alert.eventType === 'SUSPICIOUS_CONNECTION') {
+            badgeClass = 'badge-suspicious-conn';
+            badgeText = 'MALWARE_C2';
         }
 
         const timeStr = formatAlertTime(alert.timestamp);
@@ -433,6 +437,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (btnSimBruteForce) {
         btnSimBruteForce.addEventListener('click', () => triggerSimulation('bruteforce'));
+    }
+    if (btnSimSuspicious) {
+        btnSimSuspicious.addEventListener('click', () => triggerSimulation('suspicious_port'));
     }
 
     // --- Monitor Controls ---

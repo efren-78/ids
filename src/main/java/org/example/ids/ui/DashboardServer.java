@@ -410,6 +410,20 @@ public class DashboardServer {
                             detectionEngine.submit(e);
                         }
                         break;
+                    case "suspicious_port":
+                    case "c2":
+                        // Simular conexión saliente a C2 / Backdoor (puerto 4444 Metasploit)
+                        Event e = new Event();
+                        e.setTimestamp(Instant.now());
+                        e.setSrcIp("192.168.1.105");
+                        e.setDstIp("198.51.100.23");
+                        e.setSrcPort(49200);
+                        e.setDstPort(4444);
+                        e.setProtocol("TCP");
+                        e.setSyn(true);
+                        e.setAck(false);
+                        detectionEngine.submit(e);
+                        break;
                 }
             }
 
