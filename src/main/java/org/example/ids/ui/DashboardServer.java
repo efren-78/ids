@@ -368,7 +368,7 @@ public class DashboardServer {
             if (detectionEngine != null) {
                 switch (type) {
                     case "portscan":
-                        // Simular 15 puertos destino diferentes desde la misma IP
+                        // Simular 15 puertos destino diferentes hacia el mismo host
                         for (int p = 1; p <= 15; p++) {
                             Event e = new Event();
                             e.setTimestamp(Instant.now());
@@ -377,6 +377,8 @@ public class DashboardServer {
                             e.setSrcPort(34567);
                             e.setDstPort(p * 100);
                             e.setProtocol("TCP");
+                            e.setSyn(true);
+                            e.setAck(false);
                             detectionEngine.submit(e);
                         }
                         break;

@@ -11,10 +11,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Detecta escaneo de puertos (port scanning).
+ * Detecta escaneo de puertos (Port Scanning).
  *
- * Utiliza Caffeine Cache con algoritmo W-TinyLFU para limitar el uso de memoria
- * y descartar automáticamente registros de conexiones expiradas.
+ * Algoritmo: Rastrea intentos de conexión (en TCP: paquetes SYN sin ACK, o sondas UDP)
+ * desde una misma IP origen hacia múltiples puertos distintos en una misma IP destino
+ * dentro de una ventana de tiempo.
+ *
+ * Filtra el tráfico establecido y aísla la detección por par atacante -> víctima
+ * para evitar falsos positivos provocados por la navegación web cotidiana o consultas DNS.
  */
 public class PortScanDetector implements Detector {
 
@@ -47,16 +51,28 @@ public class PortScanDetector implements Detector {
     }
 
     /**
-     * Analiza un evento y lo marca como PORT_SCAN si la IP origen
-     * ha contactado demasiados puertos distintos en la ventana actual.
+     * Analiza un evento y lo clasifica como PORT_SCAN si la IP origen ha intentado
+     * conectar a un número excesivo de puertos distintos en una misma IP destino.
      */
     @Override
     public void analyze(Event event) {
-        if (event == null || event.getSrcIp() == null || event.getSrcIp().isBlank()) {
+        if (event == null || event.getSrcIp() == null || event.getSrcIp().isBlank()
+                || event.getDstIp() == null || event.getDstIp().isBlank()) {
             return;
         }
 
-        Set<Integer> ports = connections.get(event.getSrcIp(), k -> ConcurrentHashMap.newKeySet());
+        // Para TCP: solo analizar intentos de inicio de conexión (SYN activo y ACK inactivo)
+        // Esto descarta tráfico establecido, paquetes de datos normales y respuestas
+        if ("TCP".equalsIgnoreCase(event.getProtocol())) {
+            if (!event.isSyn() || event.isAck()) {
+                return;
+            }
+        }
+
+        // Clave única por par Atacante -> Víctima para evitar falsos positivos con tráfico web normal
+        String flowKey = event.getSrcIp() + "->" + event.getDstIp();
+
+        Set<Integer> ports = connections.get(flowKey, k -> ConcurrentHashMap.newKeySet());
         if (ports != null) {
             ports.add(event.getDstPort());
 
@@ -83,7 +99,7 @@ public class PortScanDetector implements Detector {
     }
 
     /**
-     * Retorna el número estimado de IPs registradas actualmente en memoria.
+     * Retorna el número estimado de pares IP registrados actualmente en memoria.
      */
     public long estimatedSize() {
         return connections.estimatedSize();
